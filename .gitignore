@@ -3,3 +3,5 @@ __pycache__/
 .ipynb_checkpoints/
 *.pyc
 .DS_Store
+.pytest_cache/
+data/hillstrom.csv

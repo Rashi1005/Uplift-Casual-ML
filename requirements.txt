@@ -7,3 +7,4 @@ lightgbm
 jupyter
 scikit-uplift
 econml
+pytest

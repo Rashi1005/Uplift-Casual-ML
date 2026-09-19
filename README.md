@@ -99,18 +99,20 @@ This covers 3 of 5 originally scoped dashboard screens (model comparison, budget
 ## Repository structure
 
 ```
-uplift-causal-ml/
+Uplift-Casual-ML/
 ├── data/
+│   ├── MANIFEST.md         # dataset name, source, schema, known limitations
+│   ├── hillstrom.csv       # raw data (not committed -- created by prepare_data.py)
 │   └── processed/          # cleaned splits, model outputs, saved scores
 ├── notebooks/               # 01 through 06, in pipeline order
 ├── src/
-│   └── data_loader.py
+│   ├── data_loader.py
+│   └── prepare_data.py     # raw-data download, validation, and reporting
+├── tests/
+│   └── test_data_pipeline.py
 ├── reports/                 # Qini and business impact chart images
 ├── dashboard/
 │   └── index.html           # interactive results dashboard
-├── docs/
-│   ├── Final_Report.docx
-│   └── Presentation.pptx
 ├── requirements.txt
 └── README.md
 ```
@@ -120,13 +122,48 @@ uplift-causal-ml/
 ## Setup
 
 ```bash
-git clone https://github.com/Rashi1005/uplift-causal-ml.git
-cd uplift-causal-ml
+git clone https://github.com/Rashi1005/Uplift-Casual-ML.git
+cd Uplift-Casual-ML
 python -m venv venv
 source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+### Preparing the data
+
+The raw dataset is not committed to this repository (see
+`data/MANIFEST.md`) — download it once, right after installing
+dependencies:
+
+```bash
+python src/prepare_data.py
+```
+
+This downloads the Hillstrom dataset, saves it to `data/hillstrom.csv`,
+validates its schema, and prints shape, missing-value, and treatment-group
+counts. `src/data_loader.py` (used throughout the notebooks) reads from
+this same file as its local fallback, so the two stay in sync.
+
+If the download fails (a known limitation — see `data/MANIFEST.md`),
+`prepare_data.py` prints manual fallback instructions rather than failing
+silently.
+
+Once data preparation succeeds:
+
+```bash
 jupyter notebook notebooks/01_eda.ipynb
 ```
+
+### Running the tests
+
+```bash
+pytest tests/test_data_pipeline.py -v
+```
+
+These cover successful loading, missing-column validation, missing-file
+behavior, and schema consistency between `src/data_loader.py` and
+`src/prepare_data.py` — using small synthetic fixtures, not the real
+dataset, so they run without network access.
 
 ---
 
