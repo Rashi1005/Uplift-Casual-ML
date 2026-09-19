@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Uplift Modeling Results — Who Should We Actually Target?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --navy: #1E2761;
+    --navy-dark: #12173F;
+    --ice: #DCE6FB;
+    --ice-soft: #F1F5FD;
+    --amber: #C4900F;
+    --teal: #1C7293;
+    --red: #A6474C;
+    --bg: #FAFBFE;
+    --surface: #FFFFFF;
+    --text: #15172B;
+    --text-muted: #565A78;
+    --border: #E4E8F5;
+    --font-head: 'Newsreader', Georgia, 'Times New Roman', serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0F1120;
+    --surface: #171A30;
+    --text: #EDEFF9;
+    --text-muted: #A6AAC9;
+    --border: #2A2E4A;
+    --ice-soft: #1C2040;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0F1120;
+      --surface: #171A30;
+      --text: #EDEFF9;
+      --text-muted: #A6AAC9;
+      --border: #2A2E4A;
+      --ice-soft: #1C2040;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  /* ===== HERO ===== */
+  header.hero {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
+    color: #fff;
+    padding: 64px 0 56px;
+  }
+  .hero-tag {
+    font-size: 14px;
+    color: var(--ice);
+    margin: 0 0 18px;
+    font-weight: 500;
+  }
+  .hero h1 {
+    font-family: var(--font-head);
+    font-weight: 500;
+    font-size: clamp(32px, 4.2vw, 52px);
+    line-height: 1.12;
+    margin: 0 0 20px;
+    max-width: 820px;
+  }
+  .hero p.sub {
+    font-size: 17px;
+    color: var(--ice);
+    max-width: 640px;
+    margin: 0 0 36px;
+  }
+  .hero-stats {
+    display: flex;
+    gap: 48px;
+    flex-wrap: wrap;
+  }
+  .hero-stat .num {
+    font-family: var(--font-head);
+    font-size: 34px;
+    font-weight: 500;
+    color: #fff;
+  }
+  .hero-stat .lbl {
+    font-size: 13px;
+    color: var(--ice);
+    margin-top: 4px;
+  }
+
+  /* ===== SECTIONS ===== */
+  section { padding: 56px 0; border-bottom: 1px solid var(--border); }
+  section:last-of-type { border-bottom: none; }
+  h2 {
+    font-family: var(--font-head);
+    font-weight: 500;
+    font-size: 28px;
+    margin: 0 0 10px;
+  }
+  .section-intro {
+    color: var(--text-muted);
+    max-width: 680px;
+    font-size: 15px;
+    margin: 0 0 32px;
+  }
+
+  /* ===== MODEL COMPARISON ===== */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+  }
+  .chart-card canvas { max-height: 340px; }
+  .finding-card {
+    background: var(--navy);
+    color: #fff;
+    border-radius: 10px;
+    padding: 26px;
+  }
+  .finding-card h3 {
+    font-family: var(--font-head);
+    font-weight: 500;
+    font-size: 19px;
+    margin: 0 0 12px;
+    color: #fff;
+  }
+  .finding-card p {
+    font-size: 14px;
+    color: var(--ice);
+    margin: 0 0 14px;
+  }
+  .finding-card .cite {
+    font-size: 12.5px;
+    color: var(--ice);
+    opacity: 0.8;
+    font-style: italic;
+  }
+
+  /* model select pills */
+  .pill-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .pill {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .pill[aria-pressed="true"] {
+    background: var(--navy);
+    border-color: var(--navy);
+    color: #fff;
+  }
+  .pill:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+  /* ===== BUDGET SIMULATOR ===== */
+  .sim-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px;
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 26px;
+  }
+  .toggle {
+    display: inline-flex;
+    background: var(--ice-soft);
+    border-radius: 999px;
+    padding: 4px;
+  }
+  .toggle button {
+    border: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 22px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+  .toggle button[aria-pressed="true"] {
+    background: var(--navy);
+    color: #fff;
+  }
+  .toggle button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .sim-note { font-size: 13px; color: var(--text-muted); }
+
+  .bar-list { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr 64px; align-items: center; gap: 12px; }
+  .bar-row .name { font-size: 13.5px; font-weight: 500; }
+  .bar-track { background: var(--ice-soft); border-radius: 6px; height: 26px; overflow: hidden; }
+  .bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.5s cubic-bezier(.4,0,.2,1);
+  }
+  .bar-row .val { font-size: 13.5px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ===== CAVEAT BANNER ===== */
+  .caveat {
+    background: var(--ice-soft);
+    border-left: 3px solid var(--amber);
+    border-radius: 6px;
+    padding: 16px 20px;
+    font-size: 13.5px;
+    color: var(--text-muted);
+    margin-top: 22px;
+  }
+  .caveat strong { color: var(--text); }
+
+  /* ===== METHOD STRIP ===== */
+  .method-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+  }
+  .method-item {
+    border-top: 2px solid var(--navy);
+    padding-top: 14px;
+  }
+  .method-item .n {
+    font-family: var(--font-head);
+    font-size: 26px;
+    color: var(--navy);
+  }
+  .method-item .t { font-size: 13px; font-weight: 600; margin: 4px 0 4px; }
+  .method-item .d { font-size: 12.5px; color: var(--text-muted); }
+
+  /* ===== PERSUADABLES QUADRANT ===== */
+  .quad-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .quad-cell {
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-family: var(--font-body);
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .quad-cell:hover { border-color: var(--teal); }
+  .quad-cell[aria-pressed="true"] { background: var(--ice-soft); border-color: var(--navy); }
+  .quad-cell:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .quad-tag {
+    align-self: flex-start;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .quad-title { font-size: 15.5px; font-weight: 600; color: var(--text); }
+  .quad-desc { font-size: 13px; color: var(--text-muted); }
+
+  .quad-detail {
+    background: var(--ice-soft);
+    border-radius: 10px;
+    padding: 18px 22px;
+    font-size: 14px;
+    color: var(--text);
+    min-height: 26px;
+  }
+  .quad-detail p { margin: 0; }
+
+  .gap-bar { display: flex; flex-direction: column; gap: 12px; }
+  .gap-row { display: grid; grid-template-columns: 240px 1fr 60px; align-items: center; gap: 12px; }
+  .gap-label { font-size: 13px; color: var(--text-muted); }
+  .gap-track { background: var(--ice-soft); border-radius: 6px; height: 22px; overflow: hidden; }
+  .gap-fill { height: 100%; border-radius: 6px; transition: width 0.7s cubic-bezier(.4,0,.2,1); }
+  .gap-val { font-size: 13.5px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+  footer {
+    padding: 32px 0 48px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+  footer .refs { margin-top: 8px; }
+  footer .refs div { margin-bottom: 4px; }
+
+  @media (max-width: 860px) {
+    .compare-grid { grid-template-columns: 1fr; }
+    .method-grid { grid-template-columns: repeat(2, 1fr); }
+    .bar-row { grid-template-columns: 100px 1fr 54px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="hero-tag">Uplift Modeling &middot; Causal Machine Learning &middot; Hillstrom Email Marketing Dataset</p>
+    <h1>Does knowing who to target actually change the outcome?</h1>
+    <p class="sub">Four targeting strategies, tested on the same 12,800 held-out customers, evaluated the way this field actually evaluates itself &mdash; with confidence intervals, not just a single winning number.</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">64,000</div><div class="lbl">customers, real RCT data</div></div>
+      <div class="hero-stat"><div class="num">4</div><div class="lbl">targeting strategies compared</div></div>
+      <div class="hero-stat"><div class="num">500</div><div class="lbl">bootstrap resamples per model</div></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="compare">
+    <h2>Which model actually ranks customers best?</h2>
+    <p class="section-intro">Qini coefficient measures how well a model's ranking captures real incremental visits. Click a model to isolate it &mdash; the shaded band is its 95% confidence interval.</p>
+
+    <div class="compare-grid">
+      <div class="chart-card">
+        <div class="pill-row" id="pillRow"></div>
+        <canvas id="qiniChart" role="img" aria-label="Bar chart of Qini coefficients with confidence intervals for four targeting models"></canvas>
+      </div>
+      <div class="finding-card">
+        <h3>The honest headline</h3>
+        <p>Every model's confidence interval crosses zero and overlaps every other model's. At this sample size, none of the four &mdash; including the naive baseline &mdash; can be shown to beat random targeting with statistical confidence.</p>
+        <p>The Two-Model Approach has the highest point estimate (0.0234), but that alone isn't proof it's the best strategy.</p>
+        <p class="cite">Consistent with Diemert et al. (2018), the paper behind the Criteo uplift benchmark, which found similar statistical indistinguishability at comparable sample sizes.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="simulator">
+    <h2>Budget simulator</h2>
+    <p class="section-intro">If a business could only email a fraction of its customers, which targeting strategy delivers the most real incremental visits? Toggle the budget to see how the ranking shifts.</p>
+
+    <div class="sim-card">
+      <div class="toggle-row">
+        <div class="toggle" role="group" aria-label="Select budget level">
+          <button id="btn10" aria-pressed="true">10% budget</button>
+          <button id="btn20" aria-pressed="false">20% budget</button>
+        </div>
+        <span class="sim-note" id="simNote">1,280 of 12,800 customers contacted</span>
+      </div>
+
+      <div class="bar-list" id="barList"></div>
+
+      <div class="caveat">
+        <strong>Point estimates, not proof.</strong> These numbers come from a single test set. Per the confidence intervals above, none of these differences are statistically significant at 95% confidence &mdash; read this as what the data suggests, not as settled fact.
+      </div>
+    </div>
+  </section>
+
+  <section id="quadrant">
+    <h2>Who are we actually targeting?</h2>
+    <p class="section-intro">A response model can only tell you who is <em>likely</em> to visit. It can't tell you whether that visit happens <em>because</em> of the email. Every customer actually falls into one of four groups &mdash; only one of them is worth spending budget on.</p>
+
+    <div class="quad-grid">
+      <button class="quad-cell" data-q="sure" aria-pressed="false">
+        <span class="quad-tag" style="background:#A6474C">Sure Things</span>
+        <span class="quad-title">Would visit regardless</span>
+        <span class="quad-desc">The email changes nothing for them &mdash; budget spent here is wasted.</span>
+      </button>
+      <button class="quad-cell" data-q="lost" aria-pressed="false">
+        <span class="quad-tag" style="background:#8A8FAA">Lost Causes</span>
+        <span class="quad-title">Won't visit either way</span>
+        <span class="quad-desc">No intervention moves them. Also wasted budget, for the opposite reason.</span>
+      </button>
+      <button class="quad-cell" data-q="persuadable" aria-pressed="false">
+        <span class="quad-tag" style="background:#1C7293">Persuadables</span>
+        <span class="quad-title">Visit only because of the email</span>
+        <span class="quad-desc">The entire point of targeting. This is the group uplift models try to isolate.</span>
+      </button>
+      <button class="quad-cell" data-q="sleeping" aria-pressed="false">
+        <span class="quad-tag" style="background:#C4900F">Sleeping Dogs</span>
+        <span class="quad-title">Would visit, but the email pushes them away</span>
+        <span class="quad-desc">Rare, but real &mdash; contacting them actively backfires.</span>
+      </button>
+    </div>
+
+    <div class="quad-detail" id="quadDetail">
+      <p>Select a group above to see why a standard response model can't tell it apart from the others.</p>
+    </div>
+
+    <div class="chart-card" style="margin-top:22px;">
+      <h3 style="font-family:var(--font-head);font-weight:500;font-size:17px;margin:0 0 6px;">What we actually measured</h3>
+      <p style="font-size:13.5px;color:var(--text-muted);margin:0 0 16px;max-width:680px;">Our naive baseline model ranks customers by predicted visit probability. Its top decile visited at a real, verified rate of <strong style="color:var(--text)">24.06%</strong>, against <strong style="color:var(--text)">13.71%</strong> for everyone else &mdash; a genuine 10.4-point gap.</p>
+      <div class="gap-bar">
+        <div class="gap-row">
+          <span class="gap-label">Top 10% (highest predicted probability)</span>
+          <div class="gap-track"><div class="gap-fill" style="width:0%; background:#1E2761;" data-target="24.06"></div></div>
+          <span class="gap-val">24.06%</span>
+        </div>
+        <div class="gap-row">
+          <span class="gap-label">Remaining 90% of customers</span>
+          <div class="gap-track"><div class="gap-fill" style="width:0%; background:#8A8FAA;" data-target="13.71"></div></div>
+          <span class="gap-val">13.71%</span>
+        </div>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-muted);margin:16px 0 0;">That gap mixes Sure Things and Persuadables together &mdash; a response model has no way to separate them. That's the exact gap the uplift models on this dashboard are built to close.</p>
+    </div>
+  </section>
+
+  <section id="method">
+    <h2>How this was built</h2>
+    <div class="method-grid">
+      <div class="method-item">
+        <div class="n">01</div>
+        <div class="t">Validate</div>
+        <div class="d">Balance checks confirm treatment/control assignment was genuinely randomized before any modeling began.</div>
+      </div>
+      <div class="method-item">
+        <div class="n">02</div>
+        <div class="t">Baseline</div>
+        <div class="d">A naive LightGBM classifier &mdash; the common, causally-blind approach most targeting still uses today.</div>
+      </div>
+      <div class="method-item">
+        <div class="n">03</div>
+        <div class="t">Uplift models</div>
+        <div class="d">Two-Model, Class Transformation, and a Causal Forest &mdash; three methods of increasing rigor.</div>
+      </div>
+      <div class="method-item">
+        <div class="n">04</div>
+        <div class="t">Evaluate</div>
+        <div class="d">Qini coefficients with bootstrapped confidence intervals &mdash; the field's standard, not accuracy or F1.</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <div>Built on the Hillstrom Email Marketing dataset. Methodology grounded in:</div>
+  <div class="refs">
+    <div>Athey, Tibshirani &amp; Wager (2019). Generalized Random Forests. <em>Annals of Statistics.</em></div>
+    <div>Belbahri et al. (2021). Qini-based Uplift Regression. <em>Annals of Applied Statistics.</em></div>
+    <div>Diemert et al. (2018). A Large Scale Benchmark for Uplift Modeling. <em>AdKDD, KDD 2018.</em></div>
+  </div>
+</footer>
+
+<script>
+  // ===== Real project data =====
+  const qini = [
+    { name: "Two-Model",      short: "2M",  value: 0.0234, lo: -0.0041, hi: 0.0520, color: "#1E2761" },
+    { name: "Class Transform", short: "CT", value: 0.0231, lo: -0.0062, hi: 0.0507, color: "#1C7293" },
+    { name: "Baseline (naive)", short: "BL", value: 0.0129, lo: -0.0134, hi: 0.0420, color: "#A6474C" },
+    { name: "Causal Forest",  short: "CF",  value: 0.0077, lo: -0.0220, hi: 0.0353, color: "#C4900F" },
+  ];
+
+  const business = {
+    10: [
+      { name: "Two-Model", value: 109.9 },
+      { name: "Baseline", value: 105.0 },
+      { name: "Class Transform", value: 91.1 },
+      { name: "Causal Forest", value: 60.2 },
+      { name: "Random", value: 51.5 },
+    ],
+    20: [
+      { name: "Baseline", value: 213.9 },
+      { name: "Two-Model", value: 193.6 },
+      { name: "Class Transform", value: 192.2 },
+      { name: "Causal Forest", value: 136.2 },
+      { name: "Random", value: 117.2 },
+    ]
+  };
+
+  const colorMap = {
+    "Two-Model": "#1E2761",
+    "Baseline": "#A6474C",
+    "Class Transform": "#1C7293",
+    "Causal Forest": "#C4900F",
+    "Random": "#8A8FAA",
+  };
+
+  // ===== Qini chart =====
+  let activeIdx = null;
+  const ctx = document.getElementById('qiniChart').getContext('2d');
+  const errorBarPlugin = {
+    id: 'errorBars',
+    afterDatasetsDraw(chart) {
+      const { ctx, scales: { x, y } } = chart;
+      qini.forEach((m, i) => {
+        if (activeIdx !== null && activeIdx !== i) return;
+        const barX = x.getPixelForValue(i);
+        const yLo = y.getPixelForValue(m.lo);
+        const yHi = y.getPixelForValue(m.hi);
+        ctx.save();
+        ctx.strokeStyle = "#15172B";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(barX, yLo);
+        ctx.lineTo(barX, yHi);
+        ctx.moveTo(barX - 8, yLo);
+        ctx.lineTo(barX + 8, yLo);
+        ctx.moveTo(barX - 8, yHi);
+        ctx.lineTo(barX + 8, yHi);
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+  };
+
+  function buildChart() {
+    const labels = qini.map(m => m.name);
+    const data = qini.map(m => m.value);
+    const colors = qini.map((m, i) => (activeIdx === null || activeIdx === i) ? m.color : "#D8DCEC");
+    return new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: colors,
+          borderRadius: 4,
+          maxBarThickness: 64,
+        }]
+      },
+      options: {
+        responsive: true,
+        animation: { duration: 300 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (item) => {
+                const m = qini[item.dataIndex];
+                return [`Qini: ${m.value.toFixed(4)}`, `95% CI: [${m.lo.toFixed(4)}, ${m.hi.toFixed(4)}]`];
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            min: -0.035,
+            max: 0.06,
+            grid: { color: "#E4E8F5" },
+            ticks: { color: "#565A78", font: { family: 'Inter', size: 11 } },
+            title: { display: true, text: 'Qini coefficient', color: "#565A78", font: { family: 'Inter', size: 12 } }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { color: "#15172B", font: { family: 'Inter', size: 12, weight: '500' } }
+          }
+        }
+      },
+      plugins: [errorBarPlugin]
+    });
+  }
+
+  let chart = buildChart();
+
+  const pillRow = document.getElementById('pillRow');
+  const allPill = document.createElement('button');
+  allPill.className = 'pill';
+  allPill.textContent = 'All models';
+  allPill.setAttribute('aria-pressed', 'true');
+  allPill.addEventListener('click', () => setActive(null));
+  pillRow.appendChild(allPill);
+
+  qini.forEach((m, i) => {
+    const b = document.createElement('button');
+    b.className = 'pill';
+    b.textContent = m.name;
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', () => setActive(i));
+    pillRow.appendChild(b);
+  });
+
+  function setActive(i) {
+    activeIdx = i;
+    [...pillRow.children].forEach((el, idx) => {
+      el.setAttribute('aria-pressed', idx === 0 ? (i === null) : (idx - 1 === i));
+    });
+    chart.destroy();
+    chart = buildChart();
+  }
+
+  // ===== Budget simulator =====
+  const barList = document.getElementById('barList');
+  const btn10 = document.getElementById('btn10');
+  const btn20 = document.getElementById('btn20');
+  const simNote = document.getElementById('simNote');
+  const maxVal = 220;
+
+  function renderBars(budget) {
+    barList.innerHTML = '';
+    business[budget].forEach(row => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'bar-row';
+      const pct = Math.max(4, (row.value / maxVal) * 100);
+      rowEl.innerHTML = `
+        <div class="name">${row.name}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:0%; background:${colorMap[row.name]}"></div></div>
+        <div class="val">${row.value.toFixed(1)}</div>
+      `;
+      barList.appendChild(rowEl);
+      requestAnimationFrame(() => {
+        rowEl.querySelector('.bar-fill').style.width = pct + '%';
+      });
+    });
+    simNote.textContent = budget === 10
+      ? "1,280 of 12,800 customers contacted"
+      : "2,560 of 12,800 customers contacted";
+  }
+
+  btn10.addEventListener('click', () => {
+    btn10.setAttribute('aria-pressed', 'true');
+    btn20.setAttribute('aria-pressed', 'false');
+    renderBars(10);
+  });
+  btn20.addEventListener('click', () => {
+    btn20.setAttribute('aria-pressed', 'true');
+    btn10.setAttribute('aria-pressed', 'false');
+    renderBars(20);
+  });
+
+  renderBars(10);
+
+  // ===== Persuadables quadrant =====
+  const quadInfo = {
+    sure: {
+      title: "Sure Things",
+      body: "A response model scores these customers HIGH because they're likely to visit &mdash; correctly. But it can't tell that they'd visit with or without the email. Targeting them looks like a win in a response model's metrics, but delivers zero real incremental value."
+    },
+    lost: {
+      title: "Lost Causes",
+      body: "Scored LOW by a response model, and correctly so &mdash; they're unlikely to visit. But that low score hides a second, distinct group: people who'd never respond no matter what you do. No model output distinguishes 'not going to happen' from 'happening anyway'."
+    },
+    persuadable: {
+      title: "Persuadables",
+      body: "The group that actually matters, and the hardest to isolate. A response model can score them anywhere &mdash; high, medium, or low &mdash; because what matters isn't their baseline likelihood to visit, it's how much that likelihood changes because of the email. Only an uplift model estimates that directly."
+    },
+    sleeping: {
+      title: "Sleeping Dogs",
+      body: "Rare in this dataset, but real in principle: customers who'd visit on their own, but who disengage if contacted. A response model has no way to flag this risk at all &mdash; it only ever predicts 'will they visit,' never 'will contacting them make things worse.'"
+    }
+  };
+  const quadCells = document.querySelectorAll('.quad-cell');
+  const quadDetail = document.getElementById('quadDetail');
+  quadCells.forEach(cell => {
+    cell.addEventListener('click', () => {
+      quadCells.forEach(c => c.setAttribute('aria-pressed', 'false'));
+      cell.setAttribute('aria-pressed', 'true');
+      const info = quadInfo[cell.dataset.q];
+      quadDetail.innerHTML = `<p><strong>${info.title}.</strong> ${info.body}</p>`;
+    });
+  });
+
+  // animate gap bars when scrolled into view
+  const gapFills = document.querySelectorAll('.gap-fill');
+  const gapObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.style.width = entry.target.dataset.target + '%';
+        gapObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.4 });
+  gapFills.forEach(el => gapObserver.observe(el));
+</script>
+</body>
+</html>
