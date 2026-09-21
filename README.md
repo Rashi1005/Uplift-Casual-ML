@@ -57,6 +57,33 @@ This is reported as a genuine, citable methodological finding — not hidden or 
 
 Each phase's output was independently verified against saved data files before moving to the next.
 
+## Code structure: notebooks vs. modules
+
+The core modeling logic behind each phase lives in reusable Python modules under `src/`, not only inline in the notebooks. Each notebook now reads as an explanatory walkthrough — the markdown commentary, the reasoning, the printed diagnostics — while the actual computation (encoding, training, evaluation, simulation) is a call into the matching module. This means the same functions can be reused outside a notebook (a script, an API, a future dashboard backend) without copy-pasting logic, and any bug fix only needs to happen in one place.
+
+| Module | Used by | What it contains |
+|---|---|---|
+| `src/data_loader.py` | all notebooks | Loads the Hillstrom dataset (live download or local cache) |
+| `src/prepare_data.py` | — (standalone script) | Raw-data download, validation, and reporting (see "Preparing the data" above) |
+| `src/preprocessing.py` | `01_eda.ipynb`, `02_preprocessing.ipynb` | Treatment binarization, randomization/balance checks, one-hot encoding, stratified train/test split and its post-split verification |
+| `src/baseline_model.py` | `03_baseline_model.ipynb` | Training and evaluating the naive (non-causal) classifier, building its ranking, and the top-decile signal check |
+| `src/uplift_models.py` | `04_uplift_models.ipynb` | Two-Model Approach, Class Transformation, Causal Forest (with the econml → causalml fallback), the uplift signal check, and combining all rankings into one table |
+| `src/evaluation.py` | `05_evaluation_qini.ipynb` | Qini curves/coefficients, the comparison plot, bootstrapped confidence intervals, pairwise significance, and the dynamically-generated final verdict |
+| `src/business_simulation.py` | `06_business_simulation.ipynb` | The budget-constrained targeting simulation, its comparison plot, and the beat-random check |
+| `src/utils.py` | `baseline_model.py`, `uplift_models.py`, `business_simulation.py` | Small helpers shared by more than one module (column-name sanitization, class-weight computation, top-k splitting, actual-uplift calculation) — extracted specifically to avoid the duplication that existed when this logic lived separately inside each notebook |
+
+**Design choices carried through every module:**
+- **Random seeds are always a parameter** (`random_state=...`), never hardcoded inside a function — every notebook still controls and prints the seed it used.
+- **File paths are always a parameter or passed in by the caller** — no module hardcodes `data/processed/...`; that path lives in the notebook that calls it.
+- **The target variable, treatment definition, and evaluation methodology are unchanged** from the original notebooks — this was a structural refactor, not a re-analysis. Every module was checked by re-running its notebook against the real, already-verified `data/processed/` files and confirming the output numbers matched exactly (e.g. the Phase 3 AUC-ROC of 0.6021, the Phase 5 Qini coefficients, and the Phase 4 signal-check results all reproduce identically).
+
+### Running the module tests
+
+```bash
+pytest tests/test_modules.py -v
+```
+
+Covers the most important function in each module (treatment binarization, the randomization check's pass/fail behavior, encoding, the stratified split's reproducibility, model training and evaluation, both uplift methods, the signal checks, ranking combination, Qini computation and its bootstrap CI, pairwise significance, and the budget simulation) using small synthetic fixtures — not the real dataset, so these run without network access, same as `tests/test_data_pipeline.py`.
 ---
 
 ## Results
@@ -104,12 +131,20 @@ Uplift-Casual-ML/
 │   ├── MANIFEST.md         # dataset name, source, schema, known limitations
 │   ├── hillstrom.csv       # raw data (not committed -- created by prepare_data.py)
 │   └── processed/          # cleaned splits, model outputs, saved scores
-├── notebooks/               # 01 through 06, in pipeline order
+├── notebooks/               # 01 through 06, in pipeline order -- explanatory
+│                             # walkthroughs that call the src/ modules below
 ├── src/
 │   ├── data_loader.py
-│   └── prepare_data.py     # raw-data download, validation, and reporting
+│   ├── prepare_data.py     # raw-data download, validation, and reporting
+│   ├── preprocessing.py    # Phases 1-2: balance checks, encoding, splitting
+│   ├── baseline_model.py   # Phase 3: naive classifier, ranking, signal check
+│   ├── uplift_models.py    # Phase 4: the three uplift models + combination
+│   ├── evaluation.py       # Phase 5: Qini metrics, bootstrap CIs, verdict
+│   ├── business_simulation.py  # Phase 6: budget simulation
+│   └── utils.py            # small helpers shared across the modules above
 ├── tests/
-│   └── test_data_pipeline.py
+│   ├── test_data_pipeline.py   # src/data_loader.py, src/prepare_data.py
+│   └── test_modules.py         # src/preprocessing.py through src/business_simulation.py
 ├── reports/                 # Qini and business impact chart images
 ├── dashboard/
 │   └── index.html           # interactive results dashboard
