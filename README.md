@@ -86,6 +86,76 @@ pytest tests/test_modules.py -v
 Covers the most important function in each module (treatment binarization, the randomization check's pass/fail behavior, encoding, the stratified split's reproducibility, model training and evaluation, both uplift methods, the signal checks, ranking combination, Qini computation and its bootstrap CI, pairwise significance, and the budget simulation) using small synthetic fixtures — not the real dataset, so these run without network access, same as `tests/test_data_pipeline.py`.
 ---
 
+---
+
+## Running the pipeline from the command line
+
+Every phase can also be run without opening a notebook, via `src/cli.py`. This calls the exact same `src/` module functions the notebooks call — it's an alternative way to run the pipeline, not a second implementation of it.
+
+```bash
+python -m src.cli <command> [options]
+```
+
+| Command | What it does | Reads | Writes |
+|---|---|---|---|
+| `prepare-data` | Download/validate the raw dataset | (network) | `{data-dir}/hillstrom.csv` |
+| `preprocess` | Encode features, stratified split | `{data-dir}/hillstrom.csv` | `{processed-dir}/{X,y,treatment}_{train,test}.csv` |
+| `train-baseline` | Train and evaluate the naive baseline | processed split | `{processed-dir}/baseline_model.pkl`, `baseline_ranking.csv` |
+| `train-uplift` | Train all 3 uplift models (slowest step) | processed split + baseline ranking | `{processed-dir}/causal_forest_model.pkl`, `uplift_scores_combined.csv` |
+| `evaluate` | Qini coefficients + bootstrapped 95% CIs | `uplift_scores_combined.csv` | `{processed-dir}/phase5_results.csv`, `{reports-dir}/qini_comparison.png` |
+| `simulate` | Budget-constrained business impact simulation | `uplift_scores_combined.csv` | `{processed-dir}/phase6_business_impact.csv`, `{reports-dir}/business_impact_comparison.png` |
+| `run-all` | Runs all six of the above, in order | — | all of the above |
+
+### Common options (every command)
+
+| Option | Default | Purpose |
+|---|---|---|
+| `--data-dir` | `data` | Where the raw dataset lives |
+| `--processed-dir` | `data/processed` | Where splits and model artifacts are read/written |
+| `--reports-dir` | `reports` | Where plots are saved |
+| `--seed` | `42` | Random seed for splitting, model training, and bootstrapping |
+| `--skip-if-exists` | off | Skip a step if its output already exists — most useful on `train-uplift`, the expensive Causal Forest fit, so repeated `run-all` calls don't re-train it every time |
+
+`train-uplift` and `run-all` also accept `--no-auto-install`, which stops the Causal Forest step from attempting a runtime `pip install econml` and falls back to `causalml` immediately instead.
+
+### Examples
+
+Run the whole pipeline from scratch, with a different seed, into a separate output folder (useful for comparing against the committed results without overwriting them):
+
+```bash
+python -m src.cli run-all --seed 7 --processed-dir data/processed_seed7 --reports-dir reports_seed7
+```
+
+Re-run everything using the default paths and seed (matches the committed `data/processed/` results):
+
+```bash
+python -m src.cli run-all
+```
+
+Already have a trained Causal Forest and just want to re-check the Qini evaluation and business simulation (e.g. after tweaking `evaluate`/`simulate` code) without re-training everything:
+
+```bash
+python -m src.cli run-all --skip-if-exists
+```
+
+Run just one phase, e.g. re-train only the baseline model:
+
+```bash
+python -m src.cli train-baseline --seed 42
+```
+
+Every command prints `[uplift-cli] ...` progress messages as it runs, and exits with a nonzero status code if a required input file is missing or a step fails — e.g. running `evaluate` before `train-uplift` has produced `uplift_scores_combined.csv` fails immediately with a clear message telling you which command to run first, rather than a raw traceback with no context.
+
+### Running the CLI smoke tests
+
+```bash
+pytest tests/test_cli.py -v
+```
+
+Covers argument parsing, configurable directories, the `--skip-if-exists` behavior, nonzero exit codes on missing inputs, and a small end-to-end chain (`train-baseline` → `train-uplift` → `evaluate` → `simulate`) run against a tiny synthetic fixture — not the real dataset, so this also runs without network access.
+
+---
+
 ## Results
 
 ### Qini coefficients (95% bootstrap CI)
@@ -140,11 +210,14 @@ Uplift-Casual-ML/
 │   ├── baseline_model.py   # Phase 3: naive classifier, ranking, signal check
 │   ├── uplift_models.py    # Phase 4: the three uplift models + combination
 │   ├── evaluation.py       # Phase 5: Qini metrics, bootstrap CIs, verdict
-│   ├── business_simulation.py  # Phase 6: budget simulation
-│   └── utils.py            # small helpers shared across the modules above
+│   │   ├── business_simulation.py  # Phase 6: budget simulation
+│   ├── utils.py             # small helpers shared across the modules above
+│   └── cli.py               # command-line interface (see "Running the pipeline
+│                             # from the command line" above)
 ├── tests/
 │   ├── test_data_pipeline.py   # src/data_loader.py, src/prepare_data.py
-│   └── test_modules.py         # src/preprocessing.py through src/business_simulation.py
+│   ├── test_modules.py         # src/preprocessing.py through src/business_simulation.py
+│   └── test_cli.py             # smoke tests for src/cli.py
 ├── reports/                 # Qini and business impact chart images
 ├── dashboard/
 │   └── index.html           # interactive results dashboard

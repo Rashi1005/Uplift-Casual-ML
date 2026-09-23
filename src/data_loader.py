@@ -15,7 +15,25 @@ EXPECTED_COLUMNS = [
 ]
 
 
-def load_hillstrom(prefer_sklift: bool = True) -> pd.DataFrame:
+def load_hillstrom(prefer_sklift: bool = True, local_path: str = None) -> pd.DataFrame:
+    """Load the Hillstrom dataset.
+
+    Parameters
+    ----------
+    prefer_sklift : bool
+        If True (default), try the live scikit-uplift download first.
+    local_path : str, optional
+        Path to read the local cached CSV from, used either as the
+        fallback when `prefer_sklift` download fails, or directly when
+        `prefer_sklift=False`. Defaults to `LOCAL_CSV_PATH` (this
+        module's original, unchanged behavior) when not given -- this
+        parameter is purely additive, added so callers such as the CLI
+        can point at a configurable data directory without changing
+        behavior for any existing caller that doesn't pass it.
+    """
+    if local_path is None:
+        local_path = LOCAL_CSV_PATH
+
     if prefer_sklift:
         try:
             from sklift.datasets import fetch_hillstrom
@@ -33,14 +51,14 @@ def load_hillstrom(prefer_sklift: bool = True) -> pd.DataFrame:
             return df[EXPECTED_COLUMNS]
         except Exception as exc:
             print(f"sklift download unavailable ({exc.__class__.__name__}: {exc}).")
-            print("Falling back to local cached copy at data/hillstrom.csv ...")
+            print(f"Falling back to local cached copy at {local_path} ...")
 
-    df = pd.read_csv(LOCAL_CSV_PATH)
+    df = pd.read_csv(local_path)
     missing_cols = set(EXPECTED_COLUMNS) - set(df.columns)
     if missing_cols:
         raise ValueError(f"Local CSV is missing expected columns: {missing_cols}")
 
-    print(f"Loaded dataset from local cache: {LOCAL_CSV_PATH}")
+    print(f"Loaded dataset from local cache: {local_path}")
     return df[EXPECTED_COLUMNS]
 
 
