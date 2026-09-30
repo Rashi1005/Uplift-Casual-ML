@@ -142,6 +142,8 @@ class TestCliFailureExitCodes:
 # ---------------------------------------------------------------------
 # Full small chain: train-baseline -> train-uplift -> evaluate -> simulate
 # ---------------------------------------------------------------------
+@pytest.mark.slow
+@pytest.mark.integration
 class TestCliSmallChain:
     def test_full_chain_on_tiny_synthetic_data(self, small_processed_dir, tmp_path):
         """Runs the 4 downstream commands back-to-back on the tiny

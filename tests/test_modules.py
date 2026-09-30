@@ -31,40 +31,9 @@ import evaluation  # noqa: E402
 import business_simulation  # noqa: E402
 
 
-# ---------------------------------------------------------------------
-# Shared fixtures
-# ---------------------------------------------------------------------
-@pytest.fixture
-def rng():
-    return np.random.default_rng(42)
-
-
-@pytest.fixture
-def synthetic_split(rng):
-    """A small, synthetic train/test split with the same shape/roles as
-    the real pipeline: a feature matrix, binary treatment, and a binary
-    outcome, with treatment carrying real (if modest) signal."""
-    n_train, n_test = 400, 100
-    n = n_train + n_test
-
-    treatment = pd.Series(rng.integers(0, 2, n))
-    x1 = rng.normal(0, 1, n)
-    x2 = rng.normal(0, 1, n)
-    X = pd.DataFrame({"x1": x1, "x2": x2, "cat_A": rng.integers(0, 2, n), "cat_B": rng.integers(0, 2, n)})
-
-    # outcome depends a bit on x1 and on treatment, so models have something
-    # real, if weak, to learn.
-    logit = -1.0 + 0.5 * x1 + 0.8 * treatment.values
-    prob = 1 / (1 + np.exp(-logit))
-    y = pd.Series((rng.random(n) < prob).astype(int))
-    y_df = pd.DataFrame({"visit": y, "conversion": pd.Series(rng.integers(0, 2, n))})
-
-    X_train, X_test = X.iloc[:n_train].reset_index(drop=True), X.iloc[n_train:].reset_index(drop=True)
-    treatment_train, treatment_test = treatment.iloc[:n_train].reset_index(drop=True), treatment.iloc[n_train:].reset_index(drop=True)
-    y_train, y_test = y_df.iloc[:n_train].reset_index(drop=True), y_df.iloc[n_train:].reset_index(drop=True)
-
-    return X_train, X_test, treatment_train, treatment_test, y_train, y_test
-
+# `rng` and `synthetic_split` fixtures now live in tests/conftest.py, so
+# they're available here (and to every other test file) without being
+# redefined -- pytest auto-discovers conftest.py fixtures by name.~
 
 # ---------------------------------------------------------------------
 # utils.py

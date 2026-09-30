@@ -156,6 +156,35 @@ Covers argument parsing, configurable directories, the `--skip-if-exists` behavi
 
 ---
 
+## Test suite
+
+All tests live under `tests/`, are deterministic (every synthetic fixture is built from a seeded RNG), and use small synthetic data rather than the real 64,000-row dataset — none of them require downloading anything or depend on the committed binary model files (`*.pkl`) in `data/processed/`.
+
+| File | Covers |
+|---|---|
+| `tests/conftest.py` | Shared fixtures (`rng`, `synthetic_split`, `tiny_split`) used across the files below |
+| `tests/test_data_pipeline.py` | `src/data_loader.py`, `src/prepare_data.py` — loading, schema validation, missing-file behavior |
+| `tests/test_modules.py` | `src/preprocessing.py` through `src/business_simulation.py` — treatment encoding, splitting, balance checks, baseline training, the Two-Model/Class Transformation uplift methods, Qini evaluation, bootstrap CIs, business simulation |
+| `tests/test_uplift_causal_forest.py` | `causal_forest_model()` specifically — split out because, unlike everything else, even a tiny Causal Forest fit takes real time (cross-fitting has fixed overhead). Marked `slow` |
+| `tests/test_error_handling.py` | Malformed (not just missing) input files — empty CSVs, wrong delimiters, truncated files, mismatched lengths, duplicate join keys |
+| `tests/test_cli.py` | `src/cli.py` — argument parsing, exit codes, configurable directories, `--skip-if-exists`. Its multi-command chain test is marked `slow`/`integration` |
+
+### Running the tests
+
+```bash
+pytest                    # everything, including the slow ones (~35s)
+pytest -m "not slow"      # skip the Causal Forest fit and the CLI chain test (~20s) -- the fast path for quick iteration
+pytest -m slow            # only the slow ones, in isolation
+pytest tests/test_modules.py -v   # a single file
+```
+
+`pytest.ini` registers the `slow` and `integration` markers (so `--strict-markers` doesn't reject them) and silences one known, upstream-only warning (`scikit-uplift`'s `qini_curve` calling a deprecated `sklearn` utility internally — not this project's own code).
+
+**Current total: 66 tests, all passing.**
+
+---
+---
+
 ## Results
 
 ### Qini coefficients (95% bootstrap CI)
