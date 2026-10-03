@@ -2,45 +2,62 @@
 utils.py
 --------
 Small, shared helper functions used by more than one module in this
-project. Extracted here specifically to avoid duplicating the same logic
-in both src/baseline_model.py and src/uplift_models.py (they used
-identical column-sanitization and class-weighting code in the original
+project.  Extracted here specifically to avoid duplicating the same logic
+in both ``src/baseline_model.py`` and ``src/uplift_models.py`` (they used
+identical column-sanitisation and class-weighting code in the original
 notebooks).
+
+Public API
+----------
+sanitize_columns(columns)
+    Replace special characters in column names so LightGBM accepts them.
+compute_scale_pos_weight(y)
+    LightGBM ``scale_pos_weight`` from a binary target's class counts.
+top_k_split(df, score_col, k_fraction)
+    Split a DataFrame into the top-k and the rest by a score column.
+actual_uplift(df, treat_col, outcome_col)
+    Real treated-vs-control outcome-rate gap within a subgroup.
 """
 
+from __future__ import annotations
+
 import re
-from typing import Iterable, List, Tuple
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
+if TYPE_CHECKING:
+    pass
 
-def sanitize_columns(columns: Iterable[str]) -> List[str]:
-    """Replace any character that isn't alphanumeric or underscore with
+
+def sanitize_columns(columns: Iterable[str]) -> list[str]:
+    """Replace every character that is not alphanumeric or underscore with
     an underscore, in every column name.
 
-    LightGBM rejects feature names containing special JSON characters
+    LightGBM rejects feature names that contain special JSON characters
     (e.g. the one-hot columns produced in preprocessing, such as
-    "history_segment_7) $1,000 +", contain '$', ',', '(', ')'). This does
-    not change which features exist or what they mean -- only how their
-    names are spelled for LightGBM's benefit. Identical logic to what
-    notebooks 03 and 04 each used to run separately.
+    ``"history_segment_7) $1,000 +"``, contain ``$``, ``,``, ``(``, ``)``).
+    This does not change which features exist or what they mean -- only how
+    their names are spelled for LightGBM's benefit.  Identical logic to
+    what notebooks 03 and 04 each used to run separately.
 
     Parameters
     ----------
-    columns : Iterable[str]
+    columns:
         Original column names.
 
     Returns
     -------
-    List[str]
-        Sanitized column names, same order and length as the input.
+    list[str]
+        Sanitised column names, same order and length as the input.
     """
     return [re.sub(r"[^A-Za-z0-9_]+", "_", str(col)) for col in columns]
 
 
 def compute_scale_pos_weight(y: pd.Series) -> float:
-    """Compute LightGBM's `scale_pos_weight` from a binary target's class
+    """Compute LightGBM's ``scale_pos_weight`` from a binary target's class
     counts (negative count / positive count).
 
     Used identically for the Phase 3 baseline model and for each of the
@@ -48,21 +65,31 @@ def compute_scale_pos_weight(y: pd.Series) -> float:
 
     Parameters
     ----------
-    y : pd.Series
+    y:
         Binary (0/1) target.
 
     Returns
     -------
     float
-        n_negative / n_positive.
+        ``n_negative / n_positive``.
     """
-    n_negative = (y == 0).sum()
-    n_positive = (y == 1).sum()
+    n_negative = int((y == 0).sum())
+    n_positive = int((y == 1).sum())
+    if n_positive == 0:
+        raise ValueError(
+            f"compute_scale_pos_weight: target has no positive examples "
+            f"(n_positive=0, n_negative={n_negative}). "
+            "Check that the target column is binary (0/1) with at least one positive."
+        )
     return n_negative / n_positive
 
 
-def top_k_split(df: pd.DataFrame, score_col: str, k_fraction: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Split a DataFrame into its top-k_fraction rows by `score_col`
+def top_k_split(
+    df: pd.DataFrame,
+    score_col: str,
+    k_fraction: float,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split a DataFrame into its top-``k_fraction`` rows by ``score_col``
     (descending) and everything else.
 
     Shared logic behind the Phase 3 signal check (top decile vs. bottom
@@ -74,18 +101,18 @@ def top_k_split(df: pd.DataFrame, score_col: str, k_fraction: float) -> Tuple[pd
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df:
         Rows to split (each row already carries its score column).
-    score_col : str
+    score_col:
         Column to rank by, descending.
-    k_fraction : float
+    k_fraction:
         Fraction of rows (0 < k_fraction < 1) to place in the "top" split.
 
     Returns
     -------
-    (top, rest) : Tuple[pd.DataFrame, pd.DataFrame]
-        top has `ceil(len(df) * k_fraction)` rows; rest has the remainder.
-        Both are freshly indexed (0..n-1).
+    tuple[pd.DataFrame, pd.DataFrame]
+        ``(top, rest)`` -- ``top`` has ``ceil(len(df) * k_fraction)`` rows;
+        ``rest`` has the remainder.  Both are freshly indexed (0..n-1).
     """
     ranked = df.sort_values(score_col, ascending=False).reset_index(drop=True)
     n = len(ranked)
@@ -93,7 +120,11 @@ def top_k_split(df: pd.DataFrame, score_col: str, k_fraction: float) -> Tuple[pd
     return ranked.iloc[:top_n].reset_index(drop=True), ranked.iloc[top_n:].reset_index(drop=True)
 
 
-def actual_uplift(df: pd.DataFrame, treat_col: str = "actual_treatment", outcome_col: str = "actual_visit") -> Tuple[float, int, int]:
+def actual_uplift(
+    df: pd.DataFrame,
+    treat_col: str = "actual_treatment",
+    outcome_col: str = "actual_visit",
+) -> tuple[float, int, int]:
     """Real (treated rate - control rate) within a subgroup of rows that
     already carry actual treatment/outcome columns.
 
@@ -104,18 +135,20 @@ def actual_uplift(df: pd.DataFrame, treat_col: str = "actual_treatment", outcome
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Subgroup of test rows, must contain `treat_col` and `outcome_col`.
-    treat_col : str
+    df:
+        Subgroup of test rows; must contain ``treat_col`` and
+        ``outcome_col``.
+    treat_col:
         Column holding the actual (real, not predicted) treatment
         indicator (1 = treated, 0 = control).
-    outcome_col : str
+    outcome_col:
         Column holding the actual (real, not predicted) outcome.
 
     Returns
     -------
-    (uplift, n_treated, n_control) : Tuple[float, int, int]
-        uplift is NaN if either arm is empty within this subgroup.
+    tuple[float, int, int]
+        ``(uplift, n_treated, n_control)`` -- ``uplift`` is ``nan`` if
+        either arm is empty within this subgroup.
     """
     treated = df.loc[df[treat_col] == 1, outcome_col]
     control = df.loc[df[treat_col] == 0, outcome_col]

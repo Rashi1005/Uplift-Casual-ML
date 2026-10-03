@@ -1,83 +1,118 @@
 """
 evaluation.py
 --------------
-Reusable functions behind notebooks/05_evaluation_qini.ipynb: Qini
+Reusable functions behind ``notebooks/05_evaluation_qini.ipynb``: Qini
 curves/coefficients, bootstrapped confidence intervals, pairwise
 statistical-significance checks, and the final-verdict summary.
 
-Uses scikit-uplift's qini_curve / qini_auc_score / uplift_at_k
-throughout -- the same standard, peer-reviewed-consistent metric
-implementations the original notebook used, not a hand-rolled
+Uses scikit-uplift's ``qini_curve`` / ``qini_auc_score`` /
+``uplift_at_k`` throughout — the same standard, peer-reviewed-consistent
+metric implementations the original notebook used, not a hand-rolled
 computation.
+
+Public API
+----------
+compute_qini_metrics(y_true, treatment, rankings, k_values)
+    Qini curve, Qini AUC, and uplift_at_k for each model.
+plot_qini_curves(qini_curves, qini_scores, n_total, colors, save_path)
+    Plot all Qini curves on one chart.
+bootstrap_qini_ci(y_true, treatment, rankings, qini_scores, ...)
+    Bootstrap 95% confidence intervals for each model's Qini AUC.
+pairwise_significance(ci_results)
+    CI-overlap table for every pair of models.
+build_final_verdict(qini_scores, ci_results, significance_table, ...)
+    Dynamically generate the "Final Verdict" markdown.
 """
 
+from __future__ import annotations
+
 import warnings
-from typing import Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 # sklift's qini_curve internally calls a deprecated sklearn utility and
-# emits a FutureWarning on every call -- an upstream library detail, not
-# an issue with this code. Suppressed once here rather than per-notebook.
+# emits a FutureWarning on every call — an upstream library detail, not
+# an issue with this code.  Suppressed once here rather than per-notebook.
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 def compute_qini_metrics(
     y_true: np.ndarray,
     treatment: np.ndarray,
-    rankings: Dict[str, np.ndarray],
-    k_values: Tuple[float, ...] = (0.1, 0.2, 0.3),
-) -> Tuple[Dict[str, Tuple[np.ndarray, np.ndarray]], Dict[str, float], Dict[str, Dict[float, float]]]:
-    """Compute the Qini curve, Qini AUC (coefficient), and uplift_at_k
-    for each ranking in `rankings`.
+    rankings: dict[str, np.ndarray],
+    k_values: tuple[float, ...] = (0.1, 0.2, 0.3),
+) -> tuple[
+    dict[str, tuple[np.ndarray, np.ndarray]],
+    dict[str, float],
+    dict[str, dict[float, float]],
+]:
+    """Compute the Qini curve, Qini AUC (coefficient), and
+    ``uplift_at_k`` for each ranking in ``rankings``.
 
     Parameters
     ----------
-    y_true : np.ndarray
-        Actual outcome (e.g. visit) for each test row.
-    treatment : np.ndarray
+    y_true:
+        Actual outcome (e.g. ``visit``) for each test row.
+    treatment:
         Actual treatment indicator for each test row.
-    rankings : Dict[str, np.ndarray]
-        Model name -> uplift/predicted-probability scores, same order
-        and length as y_true/treatment.
-    k_values : Tuple[float, ...]
-        Fractions to compute uplift_at_k for.
+    rankings:
+        Model name → uplift/predicted-probability scores, same order and
+        length as ``y_true`` / ``treatment``.
+    k_values:
+        Fractions at which to compute ``uplift_at_k``.
 
     Returns
     -------
-    (qini_curves, qini_scores, uplift_at_k_scores)
-        qini_curves: name -> (x, y) points for plotting.
-        qini_scores: name -> Qini AUC.
-        uplift_at_k_scores: name -> {k: uplift_at_k value}.
+    tuple
+        ``(qini_curves, qini_scores, uplift_at_k_scores)``
+
+        - ``qini_curves``: name → ``(x, y)`` points for plotting.
+        - ``qini_scores``: name → Qini AUC.
+        - ``uplift_at_k_scores``: name → ``{k: uplift_at_k value}``.
     """
     from sklift.metrics import qini_auc_score, qini_curve, uplift_at_k
 
-    qini_curves: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
-    qini_scores: Dict[str, float] = {}
-    uplift_at_k_scores: Dict[str, Dict[float, float]] = {}
+    qini_curves: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    qini_scores: dict[str, float] = {}
+    uplift_at_k_scores: dict[str, dict[float, float]] = {}
 
     for name, uplift in rankings.items():
         x, y = qini_curve(y_true, uplift, treatment)
         qini_curves[name] = (x, y)
         qini_scores[name] = qini_auc_score(y_true, uplift, treatment)
         uplift_at_k_scores[name] = {
-            k: uplift_at_k(y_true, uplift, treatment, strategy="overall", k=k)
-            for k in k_values
+            k: uplift_at_k(y_true, uplift, treatment, strategy="overall", k=k) for k in k_values
         }
 
     return qini_curves, qini_scores, uplift_at_k_scores
 
 
 def plot_qini_curves(
-    qini_curves: Dict[str, Tuple[np.ndarray, np.ndarray]],
-    qini_scores: Dict[str, float],
+    qini_curves: dict[str, tuple[np.ndarray, np.ndarray]],
+    qini_scores: dict[str, float],
     n_total: int,
-    colors: Optional[Dict[str, str]] = None,
-    save_path: Optional[str] = None,
-):
+    colors: dict[str, str] | None = None,
+    save_path: str | None = None,
+) -> Any:
     """Plot all Qini curves on one chart with the random-targeting
-    diagonal reference line. Optionally saves to `save_path`.
+    diagonal reference line.  Optionally saves to ``save_path``.
+
+    Parameters
+    ----------
+    qini_curves:
+        Output of ``compute_qini_metrics()``; name → ``(x, y)`` arrays.
+    qini_scores:
+        Qini AUC per model, used for legend labels.
+    n_total:
+        Total number of customers in the test set (used to normalise the
+        x-axis to [0, 1]).
+    colors:
+        Optional ``{model_name: hex_color}`` override.  Defaults to a
+        built-in palette.
+    save_path:
+        If given, save the figure to this path at 200 dpi.
 
     Returns
     -------
@@ -91,23 +126,37 @@ def plot_qini_curves(
         "Class Transformation": "#55A868",
         "Causal Forest": "#C44E52",
     }
-    colors = colors or default_colors
+    resolved_colors = colors if colors is not None else default_colors
 
     fig, ax = plt.subplots(figsize=(10, 7))
 
     for name, (x, y) in qini_curves.items():
         x_frac = x / n_total
-        ax.plot(x_frac, y, label=f"{name} (Qini AUC={qini_scores[name]:+.4f})",
-                color=colors.get(name), linewidth=2.2)
+        ax.plot(
+            x_frac,
+            y,
+            label=f"{name} (Qini AUC={qini_scores[name]:+.4f})",
+            color=resolved_colors.get(name),
+            linewidth=2.2,
+        )
 
     any_curve_endpoint = next(iter(qini_curves.values()))[1][-1]
-    ax.plot([0, 1], [0, any_curve_endpoint], color="black", linestyle="--", linewidth=1.5,
-            label="Random targeting (reference)")
+    ax.plot(
+        [0, 1],
+        [0, any_curve_endpoint],
+        color="black",
+        linestyle="--",
+        linewidth=1.5,
+        label="Random targeting (reference)",
+    )
 
     ax.set_xlabel("Share of customers targeted", fontsize=12)
     ax.set_ylabel("Cumulative incremental visits", fontsize=12)
-    ax.set_title("Qini Curve Comparison — Baseline vs. Uplift Models (Test Set)",
-                 fontsize=14, fontweight="bold")
+    ax.set_title(
+        "Qini Curve Comparison — Baseline vs. Uplift Models (Test Set)",
+        fontsize=14,
+        fontweight="bold",
+    )
     ax.legend(loc="upper left", fontsize=10, framealpha=0.95)
     ax.grid(True, alpha=0.3)
     ax.set_xlim(0, 1)
@@ -122,37 +171,43 @@ def plot_qini_curves(
 def bootstrap_qini_ci(
     y_true: np.ndarray,
     treatment: np.ndarray,
-    rankings: Dict[str, np.ndarray],
-    qini_scores: Dict[str, float],
+    rankings: dict[str, np.ndarray],
+    qini_scores: dict[str, float],
     n_bootstrap: int = 500,
     random_state: int = 42,
-) -> Dict[str, Dict[str, float]]:
-    """Bootstrap (resample with replacement) the test set `n_bootstrap`
+) -> dict[str, dict[str, float]]:
+    """Bootstrap (resample with replacement) the test set ``n_bootstrap``
     times, recompute each ranking's Qini AUC on each resample, and
     report the 2.5th/97.5th percentile as a 95% confidence interval.
 
     Parameters
     ----------
-    qini_scores : Dict[str, float]
-        Point-estimate Qini AUC per model (from compute_qini_metrics),
+    y_true:
+        Actual outcome array.
+    treatment:
+        Actual treatment array.
+    rankings:
+        Model name → uplift scores.
+    qini_scores:
+        Point-estimate Qini AUC per model (from ``compute_qini_metrics``),
         included in the output for convenience.
-    n_bootstrap : int
+    n_bootstrap:
         Number of resamples (500 in the original notebook).
-    random_state : int
+    random_state:
         Seed for the resampling RNG, configurable rather than hardcoded.
 
     Returns
     -------
-    Dict[str, Dict[str, float]]
-        name -> {"qini_coefficient", "ci_lower_95", "ci_upper_95",
-        "n_successful_resamples"}.
+    dict[str, dict[str, float]]
+        ``name → {"qini_coefficient", "ci_lower_95", "ci_upper_95",
+        "n_successful_resamples"}``.
     """
     from sklift.metrics import qini_auc_score
 
     rng = np.random.default_rng(random_state)
     n = len(y_true)
 
-    bootstrap_scores = {name: [] for name in rankings}
+    bootstrap_scores: dict[str, list[float]] = {name: [] for name in rankings}
 
     for _ in range(n_bootstrap):
         resample_idx = rng.integers(0, n, size=n)
@@ -166,10 +221,10 @@ def bootstrap_qini_ci(
                 bootstrap_scores[name].append(score)
             except Exception:
                 # Extremely rare: a resample with (near-)zero customers in
-                # one arm. Skipped rather than crashing the whole bootstrap.
+                # one arm.  Skipped rather than crashing the whole bootstrap.
                 continue
 
-    ci_results = {}
+    ci_results: dict[str, dict[str, float]] = {}
     for name, scores in bootstrap_scores.items():
         scores_arr = np.array(scores)
         ci_lower, ci_upper = np.percentile(scores_arr, [2.5, 97.5])
@@ -183,17 +238,31 @@ def bootstrap_qini_ci(
     return ci_results
 
 
-def pairwise_significance(ci_results: Dict[str, Dict[str, float]]) -> pd.DataFrame:
+def pairwise_significance(
+    ci_results: dict[str, dict[str, float]],
+) -> pd.DataFrame:
     """For every pair of models, check whether their 95% confidence
-    intervals overlap. Overlapping intervals mean the apparent
-    difference between them could plausibly be sampling noise.
+    intervals overlap.  Overlapping intervals mean the apparent difference
+    between them could plausibly be sampling noise.
+
+    Parameters
+    ----------
+    ci_results:
+        Output of ``bootstrap_qini_ci()``.
 
     Returns
     -------
     pd.DataFrame
-        Columns: model_a, model_b, qini_a, qini_b, cis_overlap, verdict.
+        Columns: ``model_a``, ``model_b``, ``qini_a``, ``qini_b``,
+        ``cis_overlap``, ``verdict``.
     """
-    def intervals_overlap(lower1, upper1, lower2, upper2):
+
+    def intervals_overlap(
+        lower1: float,
+        upper1: float,
+        lower2: float,
+        upper2: float,
+    ) -> bool:
         return lower1 <= upper2 and lower2 <= upper1
 
     model_names = list(ci_results.keys())
@@ -201,37 +270,54 @@ def pairwise_significance(ci_results: Dict[str, Dict[str, float]]) -> pd.DataFra
     for i in range(len(model_names)):
         for j in range(i + 1, len(model_names)):
             name_a, name_b = model_names[i], model_names[j]
-            a, b = ci_results[name_a], ci_results[name_b]
-            overlap = intervals_overlap(a["ci_lower_95"], a["ci_upper_95"], b["ci_lower_95"], b["ci_upper_95"])
-            rows.append({
-                "model_a": name_a,
-                "model_b": name_b,
-                "qini_a": round(a["qini_coefficient"], 4),
-                "qini_b": round(b["qini_coefficient"], 4),
-                "cis_overlap": overlap,
-                "verdict": "NOT distinguishable (CIs overlap)" if overlap else "Distinguishable (CIs do not overlap)",
-            })
+            result_a, result_b = ci_results[name_a], ci_results[name_b]
+            overlap = intervals_overlap(
+                result_a["ci_lower_95"],
+                result_a["ci_upper_95"],
+                result_b["ci_lower_95"],
+                result_b["ci_upper_95"],
+            )
+            rows.append(
+                {
+                    "model_a": name_a,
+                    "model_b": name_b,
+                    "qini_a": round(result_a["qini_coefficient"], 4),
+                    "qini_b": round(result_b["qini_coefficient"], 4),
+                    "cis_overlap": overlap,
+                    "verdict": (
+                        "NOT distinguishable (CIs overlap)"
+                        if overlap
+                        else "Distinguishable (CIs do not overlap)"
+                    ),
+                }
+            )
 
     return pd.DataFrame(rows)
 
 
 def build_final_verdict(
-    qini_scores: Dict[str, float],
-    ci_results: Dict[str, Dict[str, float]],
+    qini_scores: dict[str, float],
+    ci_results: dict[str, dict[str, float]],
     significance_table: pd.DataFrame,
     reference_model: str = "Causal Forest",
 ) -> str:
-    """Assemble the same "Final Verdict" markdown the original notebook
+    """Assemble the "Final Verdict" markdown the original notebook
     produced, computed dynamically from the actual results so it always
     reflects the real run's numbers rather than a hardcoded narrative.
 
     Parameters
     ----------
-    reference_model : str
+    qini_scores:
+        Point-estimate Qini AUC per model.
+    ci_results:
+        Output of ``bootstrap_qini_ci()``.
+    significance_table:
+        Output of ``pairwise_significance()``.
+    reference_model:
         A specific model to call out separately in the verdict (the
-        original notebook singled out "Causal Forest" since it was the
-        most methodologically sophisticated model and the one whose
-        Phase 4 heuristic result needed confirming or overturning).
+        original notebook singled out ``"Causal Forest"`` since it was the
+        most methodologically sophisticated model and the one whose Phase 4
+        heuristic result needed confirming or overturning).
 
     Returns
     -------
@@ -243,52 +329,68 @@ def build_final_verdict(
     best_ci = ci_results[best_model]
 
     indistinguishable_from_best = significance_table[
-        ((significance_table["model_a"] == best_model) | (significance_table["model_b"] == best_model))
+        (
+            (significance_table["model_a"] == best_model)
+            | (significance_table["model_b"] == best_model)
+        )
         & (significance_table["cis_overlap"])
     ]
     competitor_names = set(indistinguishable_from_best["model_a"]).union(
         indistinguishable_from_best["model_b"]
     ) - {best_model}
 
-    n_distinguishable = (~significance_table["cis_overlap"]).sum()
+    n_distinguishable = int((~significance_table["cis_overlap"]).sum())
     n_total_pairs = len(significance_table)
 
     if competitor_names:
         significance_note = (
-            f"However, its 95% confidence interval overlaps with: {', '.join(sorted(competitor_names))} -- "
-            "meaning we **cannot** confidently declare a single statistical winner among these; the "
-            "apparent ranking could partly reflect sampling noise rather than a true difference in "
-            "targeting quality."
+            f"However, its 95% confidence interval overlaps with: "
+            f"{', '.join(sorted(competitor_names))} — meaning we **cannot** "
+            "confidently declare a single statistical winner among these; the "
+            "apparent ranking could partly reflect sampling noise rather than a "
+            "true difference in targeting quality."
         )
     else:
         significance_note = (
-            f"Its 95% confidence interval does **not** overlap with any other model's, so "
-            f"`{best_model}` can be considered a statistically distinguishable, genuine winner on this test set."
+            f"Its 95% confidence interval does **not** overlap with any other "
+            f"model's, so `{best_model}` can be considered a statistically "
+            "distinguishable, genuine winner on this test set."
         )
 
     reference_note = ""
     if reference_model in qini_scores:
         ref_qini = qini_scores[reference_model]
         ref_rank = sorted(qini_scores.values(), reverse=True).index(ref_qini) + 1
-        ref_worst = ref_rank == len(qini_scores)
         ref_ci = ci_results[reference_model]
         reference_note = (
-            f"- **On {reference_model} specifically:** ranked **{ref_rank} of {len(qini_scores)}** models "
-            f"by Qini coefficient ({ref_qini:+.4f}, 95% CI [{ref_ci['ci_lower_95']:+.4f}, "
+            f"- **On {reference_model} specifically:** ranked "
+            f"**{ref_rank} of {len(qini_scores)}** models by Qini coefficient "
+            f"({ref_qini:+.4f}, 95% CI [{ref_ci['ci_lower_95']:+.4f}, "
             f"{ref_ci['ci_upper_95']:+.4f}]).\n"
         )
+
+    bottom_line = (
+        f"{best_model} produced the highest point-estimate Qini coefficient on this test set"
+    )
+    if competitor_names:
+        bottom_line += (
+            ", but the difference from "
+            + ", ".join(sorted(competitor_names))
+            + " is not statistically significant given the observed sampling variability"
+        )
+    else:
+        bottom_line += " and is a statistically confirmed winner"
 
     return f"""### Final Verdict
 
 - **Highest Qini coefficient: `{best_model}`** ({best_score:+.4f}, 95% CI
-  [{best_ci['ci_lower_95']:+.4f}, {best_ci['ci_upper_95']:+.4f}]).
+  [{best_ci["ci_lower_95"]:+.4f}, {best_ci["ci_upper_95"]:+.4f}]).
 - **Statistical significance:** {significance_note}
 {reference_note}- **Overall:** {n_distinguishable} of {n_total_pairs} model-pair comparisons were
-  statistically distinguishable at the 95% confidence level. Where confidence intervals
-  overlap, this is itself a valid, citable finding -- Diemert et al. (2018), in their
+  statistically distinguishable at the 95% confidence level.  Where confidence intervals
+  overlap, this is itself a valid, citable finding — Diemert et al. (2018), in their
   large-scale Criteo uplift benchmark, similarly found several uplift methods statistically
   indistinguishable from each other on certain datasets.
 
-**Bottom line:** {best_model} produced the highest point-estimate Qini coefficient on this
-test set{" and is a statistically confirmed winner" if not competitor_names else ", but the difference from " + ", ".join(sorted(competitor_names)) + " is not statistically significant given the observed sampling variability"}.
+**Bottom line:** {bottom_line}.
 """

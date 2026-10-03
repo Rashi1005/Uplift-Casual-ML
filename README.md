@@ -98,7 +98,7 @@ python -m src.cli <command> [options]
 | `preprocess` | Encode features, stratified split | `{data-dir}/hillstrom.csv` | `{processed-dir}/{X,y,treatment}_{train,test}.csv` |
 | `train-baseline` | Train and evaluate the naive baseline | processed split | `{processed-dir}/baseline_model.pkl`, `baseline_ranking.csv` |
 | `train-uplift` | Train all 3 uplift models (slowest step) | processed split + baseline ranking | `{processed-dir}/causal_forest_model.pkl`, `uplift_scores_combined.csv` |
-| `evaluate` | Qini coefficients + bootstrapped 95% CIs | `uplift_scores_combined.csv` | `{processed-dir}/phase5_results.csv`, `{reports-dir}/qini_comparison.png` |
+| `evaluate` | Qini coefficients + bootstrapped 95% CIs | `uplift_scores_combined.csv` | `{processed-dir}/phase5_results.csv`, `phase5_pairwise_significance.csv`, `phase5_uplift_at_k.csv`, `phase5_verdict.md`, `{reports-dir}/qini_comparison.png` |
 | `simulate` | Budget-constrained business impact simulation | `uplift_scores_combined.csv` | `{processed-dir}/phase6_business_impact.csv`, `{reports-dir}/business_impact_comparison.png` |
 | `run-all` | Runs all six of the above, in order | — | all of the above |
 
@@ -241,7 +241,7 @@ Uplift-Casual-ML/
 ├── dashboard/
 │   └── index.html               # interactive results dashboard
 ├── requirements.txt
-├── pytest.ini                   # marker registration (slow, integration), warning filters
+├── pyproject.toml               # pytest, ruff (linter + formatter) configuration
 └── README.md
 ```
 
@@ -288,7 +288,15 @@ python -m src.cli run-all
 See the [Test suite](#test-suite) section above for the full breakdown — in short:
 
 ```bash
-pytest
+pytest                      # full suite (includes slow Causal Forest fits)
+pytest -m "not slow"        # fast suite only (~60 tests, completes in seconds)
+```
+
+**Linting and formatting** (configured in [`pyproject.toml`](pyproject.toml)):
+
+```bash
+ruff check src/ tests/      # lint — reports violations
+ruff format src/ tests/     # format — applies consistent style in-place
 ```
 
 ---

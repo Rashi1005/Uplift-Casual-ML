@@ -1,16 +1,17 @@
 """
 test_data_pipeline.py
 ----------------------
-Tests for the data loading and preparation workflow (src/data_loader.py
-and src/prepare_data.py).
+Tests for the data loading and preparation workflow (``src/data_loader.py``
+and ``src/prepare_data.py``).
 
 These tests use small synthetic fixtures rather than the real 64,000-row
-Hillstrom dataset, and never hit the network -- both intentional, since
-unit tests shouldn't depend on an external host being reachable (see the
-known upstream-reliability limitation documented in data/MANIFEST.md,
+Hillstrom dataset, and never hit the network — both intentional, since
+unit tests should not depend on an external host being reachable (see the
+known upstream-reliability limitation documented in ``data/MANIFEST.md``,
 which these tests exist partly to guard against).
 
-Run with:
+Run with::
+
     pytest tests/test_data_pipeline.py -v
 """
 
@@ -22,14 +23,15 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-import data_loader  # noqa: E402
-import prepare_data  # noqa: E402
+import data_loader
+import prepare_data
 
 
-def make_valid_fixture(n=50) -> pd.DataFrame:
-    """A minimal DataFrame with every expected column, valid dtypes, no
-    missing values -- small on purpose, since these tests check structure
-    and behavior, not statistical properties of the real dataset."""
+def make_valid_fixture(n: int = 50) -> pd.DataFrame:
+    """A minimal DataFrame with every expected column, valid dtypes, and no
+    missing values — small on purpose, since these tests check structure
+    and behaviour, not statistical properties of the real dataset.
+    """
     return pd.DataFrame(
         {
             "recency": [1] * n,
@@ -103,9 +105,7 @@ class TestMissingColumnValidation:
 # 3. Missing-file behavior
 # ---------------------------------------------------------------------
 class TestMissingFileBehavior:
-    def test_data_loader_raises_file_not_found_when_no_local_cache(
-        self, tmp_path, monkeypatch
-    ):
+    def test_data_loader_raises_file_not_found_when_no_local_cache(self, tmp_path, monkeypatch):
         nonexistent_path = tmp_path / "does_not_exist.csv"
         monkeypatch.setattr(data_loader, "LOCAL_CSV_PATH", str(nonexistent_path))
 
@@ -138,14 +138,23 @@ class TestExpectedSchema:
 
     def test_expected_columns_match_manifest(self):
         expected = [
-            "recency", "history_segment", "history", "mens", "womens",
-            "zip_code", "newbie", "channel", "segment", "visit",
-            "conversion", "spend",
+            "recency",
+            "history_segment",
+            "history",
+            "mens",
+            "womens",
+            "zip_code",
+            "newbie",
+            "channel",
+            "segment",
+            "visit",
+            "conversion",
+            "spend",
         ]
-        assert data_loader.EXPECTED_COLUMNS == expected
+        assert expected == data_loader.EXPECTED_COLUMNS
 
     def test_prepare_data_reuses_data_loader_schema(self):
-        # prepare_data.py must not define its own separate column list --
+        # prepare_data.py must not define its own separate column list —
         # this test guards against the two files silently drifting apart.
         assert prepare_data.EXPECTED_COLUMNS is data_loader.EXPECTED_COLUMNS
 

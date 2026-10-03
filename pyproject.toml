@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "uplift-causal-ml"
+version = "0.1.0"
+description = "A phase-wise causal ML pipeline for targeted-intervention uplift modelling."
+readme = "README.md"
+requires-python = ">=3.10"
+
+# ─── Pytest ──────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: tests that take noticeably longer than the rest of the suite (e.g. a Causal Forest fit or the CLI chain test). Excluded by default in CI fast-path runs via `pytest -m 'not slow'`; run with `pytest -m slow` or plain `pytest`.",
+    "integration: tests that exercise more than one module together (e.g. the CLI end-to-end command chain), as opposed to a single function in isolation.",
+]
+filterwarnings = [
+    # scikit-uplift calls a deprecated sklearn utility internally on every
+    # qini_curve call — an upstream library detail unrelated to this project.
+    "ignore:Function stable_cumsum is deprecated:FutureWarning",
+    # econml emits this when feature column names are not strings (numpy int
+    # index from synthetic fixtures) — upstream, not this project's code.
+    "ignore:Not all column names are strings:UserWarning",
+]
+
+# ─── Ruff (linter + formatter) ───────────────────────────────────────────────
+[tool.ruff]
+# 99 chars is the project's chosen line length. Data-science code tends to have
+# longer expressions (sklearn/lightgbm constructor calls, pandas method chains).
+line-length = 99
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (unused imports, undefined names, etc.)
+    "I",    # isort (import ordering)
+    "UP",   # pyupgrade (modernise syntax: dict[] instead of Dict[], etc.)
+    "B",    # flake8-bugbear (likely bugs and design issues)
+    "C4",   # flake8-comprehensions (unnecessary list/set/dict calls)
+    "SIM",  # flake8-simplify (simplifiable code patterns)
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    # ── Naming conventions ──────────────────────────────────────────────────
+    # ML / data-science codebases universally use uppercase for matrices
+    # (X_train, X_test) and transformations (Z_train) following the scikit-learn
+    # and mathematical convention. Enforcing lowercase would make the code
+    # *less* readable for the intended audience, not more.
+    "N803",  # argument name should be lowercase
+    "N806",  # variable in function should be lowercase
+    # ── Line-length edge cases ───────────────────────────────────────────────
+    # Long strings inside raise/assert/log statements that cannot be split
+    # without losing readability are left to the author's discretion.
+    # E501 is still active — only specific overrides via `# noqa: E501` are used.
+    # ── Boolean-trap false positives ────────────────────────────────────────
+    "B006",  # mutable default argument — flagged on numpy arrays; false positive here
+    # ── SIM rules that reduce clarity in data-science contexts ───────────────
+    "SIM108", # ternary expression — sometimes less readable than if/else in ML code
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately unpack fixture tuples even when some elements are unused
+# (the fixture exists to provide a consistent, realistic split; not every test
+# needs every returned element). RUF059 would require replacing unused names
+# with _, which adds noise when the names convey what the fixture contains.
+"tests/*" = ["RUF059"]
+
+[tool.ruff.format]
+# Use double quotes everywhere (Python convention; matches the existing codebase).
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

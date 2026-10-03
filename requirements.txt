@@ -1,8 +1,10 @@
 pandas
 numpy
+scipy
 matplotlib
 seaborn
 scikit-learn
+joblib
 lightgbm
 jupyter
 scikit-uplift

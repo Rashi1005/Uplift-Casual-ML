@@ -1,15 +1,16 @@
 """
 cli.py
 ------
-Command-line interface for running the uplift modeling pipeline without
-opening notebooks. Each notebook (01 through 06) has a matching
-subcommand that calls the same src/ modules the notebook itself calls --
-this CLI does not reimplement any modeling logic, it only orchestrates
-the existing functions in src/preprocessing.py, src/baseline_model.py,
-src/uplift_models.py, src/evaluation.py, and src/business_simulation.py.
+Command-line interface for running the uplift modelling pipeline without
+opening notebooks.  Each notebook (01 through 06) has a matching
+subcommand that calls the same ``src/`` modules the notebook itself calls
+— this CLI does not reimplement any modelling logic; it only orchestrates
+the existing functions.
 
 Usage
 -----
+::
+
     python -m src.cli prepare-data
     python -m src.cli preprocess
     python -m src.cli train-baseline
@@ -18,54 +19,93 @@ Usage
     python -m src.cli simulate
     python -m src.cli run-all
 
-Run `python -m src.cli <command> --help` for each command's options.
-See README.md's "Running the pipeline from the command line" section
+Run ``python -m src.cli <command> --help`` for each command's options.
+See ``README.md``'s "Running the pipeline from the command line" section
 for full usage examples and what each command reads/writes.
 """
+
+from __future__ import annotations
 
 import argparse
 import os
 import sys
 import traceback
-from typing import Optional
 
 import joblib
-import numpy as np
 import pandas as pd
 
 # Support running both as `python -m src.cli` (repo root on sys.path,
 # package-style imports) and `python src/cli.py` directly (this file's
-# own directory on sys.path, flat imports) -- same dual pattern already
+# own directory on sys.path, flat imports) — same dual pattern already
 # used inside the src/ modules themselves.
 try:
-    from src import baseline_model, business_simulation, evaluation, preprocessing, uplift_models, utils
-    from src.data_loader import EXPECTED_COLUMNS, load_hillstrom
+    from src import (
+        baseline_model,
+        business_simulation,
+        evaluation,
+        preprocessing,
+        uplift_models,
+        utils,
+    )
+    from src import prepare_data as _prepare_data
+    from src.data_loader import load_hillstrom
 except ImportError:
     sys.path.insert(0, os.path.dirname(__file__))
-    import baseline_model, business_simulation, evaluation, preprocessing, uplift_models, utils  # noqa: E401
-    from data_loader import EXPECTED_COLUMNS, load_hillstrom
+    import baseline_model
+    import business_simulation
+    import evaluation
+    import prepare_data as _prepare_data
+    import preprocessing
+    import uplift_models
+    import utils
+    from data_loader import load_hillstrom
 
 
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Small shared helpers
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+
+
 def log(message: str) -> None:
     """Print a clear, consistently-formatted progress message."""
     print(f"[uplift-cli] {message}")
 
 
 def ensure_dir(path: str) -> None:
+    """Create ``path`` (and parents) if it does not already exist."""
     os.makedirs(path, exist_ok=True)
 
 
-def artifacts_exist(paths) -> bool:
+def artifacts_exist(paths: list[str]) -> bool:
+    """Return ``True`` only if every path in ``paths`` exists on disk."""
     return all(os.path.exists(p) for p in paths)
 
 
-def load_processed_split(processed_dir: str):
-    """Load X_train/X_test/treatment_train/treatment_test/y_train/y_test
-    from `processed_dir`, sanitizing column names for LightGBM the same
-    way notebooks 03 and 04 each do."""
+def load_processed_split(
+    processed_dir: str,
+) -> tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.Series,
+    pd.Series,
+    pd.DataFrame,
+    pd.DataFrame,
+]:
+    """Load ``X_train``/``X_test``/``treatment_*``/``y_*`` from
+    ``processed_dir``, sanitising column names for LightGBM the same way
+    notebooks 03 and 04 each do.
+
+    Parameters
+    ----------
+    processed_dir:
+        Directory that contains the six split CSV files written by the
+        ``preprocess`` command.
+
+    Returns
+    -------
+    tuple
+        ``(X_train, X_test, treatment_train, treatment_test, y_train, y_test)``
+    """
     X_train = pd.read_csv(os.path.join(processed_dir, "X_train.csv"))
     X_test = pd.read_csv(os.path.join(processed_dir, "X_test.csv"))
     treatment_train = pd.read_csv(os.path.join(processed_dir, "treatment_train.csv"))["treatment"]
@@ -79,14 +119,20 @@ def load_processed_split(processed_dir: str):
     return X_train, X_test, treatment_train, treatment_test, y_train, y_test
 
 
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Command implementations
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+
+
 def cmd_prepare_data(args: argparse.Namespace) -> None:
     """Data preparation: download/validate the raw Hillstrom dataset.
 
+    Delegates to ``src/prepare_data.py``'s shared functions — the same
+    logic run by ``python src/prepare_data.py`` — so both entry points
+    use identical column validation, reporting, and fallback behaviour.
+
     Reads : (network) the Hillstrom dataset via scikit-uplift
-    Writes: {data_dir}/hillstrom.csv
+    Writes: ``{data_dir}/hillstrom.csv``
     """
     ensure_dir(args.data_dir)
     raw_path = os.path.join(args.data_dir, "hillstrom.csv")
@@ -96,31 +142,51 @@ def cmd_prepare_data(args: argparse.Namespace) -> None:
         return
 
     log("Downloading Hillstrom Email Marketing dataset via scikit-uplift ...")
-    from sklift.datasets import fetch_hillstrom
+    try:
+        df = _prepare_data.download_raw_dataset()
+    except Exception as exc:
+        log(f"Download failed: {exc.__class__.__name__}: {exc}")
+        log(
+            "This is a known limitation (see data/MANIFEST.md) — the upstream "
+            "host is occasionally unreachable from restricted networks.\n"
+            "  1. Try again from a different network, or\n"
+            f"  2. Place hillstrom.csv manually at: {raw_path}\n"
+            "  3. Then re-run — it will validate the file you placed there."
+        )
+        if os.path.exists(raw_path):
+            log(f"Found an existing file at {raw_path} — validating it instead.")
+            df = pd.read_csv(raw_path)
+        else:
+            raise
 
-    bunch = fetch_hillstrom(target_col="all")
-    df = bunch.data.copy()
-    df = pd.concat([df, bunch.target], axis=1)
-    df["segment"] = bunch.treatment
-    df = df[EXPECTED_COLUMNS]
+    # Validate columns — raises ValueError with a clear message if malformed.
+    _prepare_data.validate_columns(df)
 
     df.to_csv(raw_path, index=False)
     log(f"Saved raw dataset -> {raw_path}  ({df.shape[0]:,} rows x {df.shape[1]} columns)")
 
+    # Print the same dataset report that `python src/prepare_data.py` prints.
+    _prepare_data.report(df)
+
 
 def cmd_preprocess(args: argparse.Namespace) -> None:
-    """Preprocessing: binarize treatment, encode features, stratified
+    """Preprocessing: binarise treatment, encode features, stratified
     train/test split, and the post-split balance verification.
 
-    Reads : {data_dir}/hillstrom.csv
-    Writes: {processed_dir}/{X_train,X_test,treatment_train,
-            treatment_test,y_train,y_test}.csv
+    Reads : ``{data_dir}/hillstrom.csv``
+    Writes: ``{processed_dir}/{X_train,X_test,treatment_train,
+            treatment_test,y_train,y_test}.csv``
     """
     ensure_dir(args.processed_dir)
-    output_paths = [
-        os.path.join(args.processed_dir, f) for f in
-        ["X_train.csv", "X_test.csv", "treatment_train.csv", "treatment_test.csv", "y_train.csv", "y_test.csv"]
+    output_filenames = [
+        "X_train.csv",
+        "X_test.csv",
+        "treatment_train.csv",
+        "treatment_test.csv",
+        "y_train.csv",
+        "y_test.csv",
     ]
+    output_paths = [os.path.join(args.processed_dir, f) for f in output_filenames]
     if args.skip_if_exists and artifacts_exist(output_paths):
         log("SKIPPED (--skip-if-exists): processed train/test split already exists.")
         return
@@ -140,12 +206,22 @@ def cmd_preprocess(args: argparse.Namespace) -> None:
     y = df[outcome_cols].copy()
 
     log(f"Splitting 80/20, stratified by treatment + conversion, random_state={args.seed} ...")
-    X_train, X_test, treatment_train, treatment_test, y_train, y_test = preprocessing.stratified_split(
-        X, treatment, y, test_size=0.20, random_state=args.seed, strat_outcome_col="conversion",
+    X_train, X_test, treatment_train, treatment_test, y_train, y_test = (
+        preprocessing.stratified_split(
+            X,
+            treatment,
+            y,
+            test_size=0.20,
+            random_state=args.seed,
+            strat_outcome_col="conversion",
+        )
     )
 
     verification_df, any_deviation = preprocessing.verify_split_balance(
-        treatment_train, y_train, treatment_test, y_test,
+        treatment_train,
+        y_train,
+        treatment_test,
+        y_test,
     )
     if any_deviation:
         log("WARNING: the split deviates from the Phase 1 reference rates beyond tolerance:")
@@ -160,39 +236,59 @@ def cmd_preprocess(args: argparse.Namespace) -> None:
     y_train.to_csv(output_paths[4], index=False)
     y_test.to_csv(output_paths[5], index=False)
 
-    log(f"Saved train ({len(X_train):,} rows) and test ({len(X_test):,} rows) splits -> {args.processed_dir}/")
+    log(
+        f"Saved train ({len(X_train):,} rows) and test ({len(X_test):,} rows) "
+        f"splits -> {args.processed_dir}/"
+    )
 
 
 def cmd_train_baseline(args: argparse.Namespace) -> None:
     """Baseline model training: naive LightGBM classifier, evaluation,
     ranking, and the top-decile signal check.
 
-    Reads : {processed_dir}/{X_train,X_test,treatment_test,y_train,y_test}.csv
-    Writes: {processed_dir}/baseline_model.pkl, baseline_ranking.csv
+    Reads : ``{processed_dir}/{X_train,X_test,treatment_test,y_train,y_test}.csv``
+    Writes: ``{processed_dir}/baseline_model.pkl``, ``baseline_ranking.csv``
     """
     ensure_dir(args.processed_dir)
     model_path = os.path.join(args.processed_dir, "baseline_model.pkl")
     ranking_path = os.path.join(args.processed_dir, "baseline_ranking.csv")
 
     if args.skip_if_exists and artifacts_exist([model_path, ranking_path]):
-        log(f"SKIPPED (--skip-if-exists): {model_path} and {ranking_path} already exist.")
+        log(
+            f"SKIPPED (--skip-if-exists): {os.path.basename(model_path)} and "
+            f"{os.path.basename(ranking_path)} already exist."
+        )
         return
 
-    X_train, X_test, treatment_train, treatment_test, y_train, y_test = load_processed_split(args.processed_dir)
-    y_train_target, y_test_target = y_train["visit"], y_test["visit"]
+    X_train, X_test, _treatment_train, treatment_test, y_train, y_test = load_processed_split(
+        args.processed_dir
+    )
+    y_train_target = y_train["visit"]
+    y_test_target = y_test["visit"]
 
     log(f"Training baseline LightGBM classifier on target 'visit', random_state={args.seed} ...")
-    model = baseline_model.train_baseline_model(X_train, y_train_target, random_state=args.seed, n_estimators=200)
+    model = baseline_model.train_baseline_model(
+        X_train,
+        y_train_target,
+        random_state=args.seed,
+        n_estimators=200,
+    )
 
     results = baseline_model.evaluate_baseline_model(model, X_test, y_test_target)
-    log(f"AUC-ROC={results['auc_roc']:.4f}  Precision={results['precision']:.4f}  "
-        f"Recall={results['recall']:.4f}  AvgPrecision={results['average_precision']:.4f}")
+    log(
+        f"AUC-ROC={results['auc_roc']:.4f}  "
+        f"Precision={results['precision']:.4f}  "
+        f"Recall={results['recall']:.4f}  "
+        f"AvgPrecision={results['average_precision']:.4f}"
+    )
 
     ranking = baseline_model.build_ranking(X_test, results["test_probs"], treatment_test, y_test)
     sc = baseline_model.signal_check(ranking, "visit")
     status = "PASSED" if sc["passed"] else "FAILED"
-    log(f"Signal check {status}: top-decile rate {sc['top_rate']*100:.2f}% vs. "
-        f"rest {sc['rest_rate']*100:.2f}% (gap {sc['gap']*100:+.2f} pp)")
+    log(
+        f"Signal check {status}: top-decile rate {sc['top_rate'] * 100:.2f}% vs. "
+        f"rest {sc['rest_rate'] * 100:.2f}% (gap {sc['gap'] * 100:+.2f} pp)"
+    )
 
     joblib.dump(model, model_path)
     ranking.to_csv(ranking_path, index=False)
@@ -204,14 +300,14 @@ def cmd_train_uplift(args: argparse.Namespace) -> None:
     """Uplift model training: Two-Model Approach, Class Transformation,
     and Causal Forest, plus their signal checks and combined rankings.
 
-    This is the most computationally expensive command (the Causal
-    Forest fit) -- use --skip-if-exists on repeated runs once it has
-    completed successfully once.
+    This is the most computationally expensive command (the Causal Forest
+    fit) — use ``--skip-if-exists`` on repeated runs once it has completed
+    successfully once.
 
-    Reads : {processed_dir}/{X_train,X_test,treatment_train,
-            treatment_test,y_train,y_test,baseline_ranking}.csv
-    Writes: {processed_dir}/causal_forest_model.pkl,
-            uplift_scores_combined.csv
+    Reads : ``{processed_dir}/{X_train,X_test,treatment_*,y_*,
+            baseline_ranking}.csv``
+    Writes: ``{processed_dir}/causal_forest_model.pkl``,
+            ``uplift_scores_combined.csv``
     """
     ensure_dir(args.processed_dir)
     combined_path = os.path.join(args.processed_dir, "uplift_scores_combined.csv")
@@ -224,43 +320,64 @@ def cmd_train_uplift(args: argparse.Namespace) -> None:
     baseline_ranking_path = os.path.join(args.processed_dir, "baseline_ranking.csv")
     if not os.path.exists(baseline_ranking_path):
         raise FileNotFoundError(
-            f"{baseline_ranking_path} not found -- run 'train-baseline' before 'train-uplift'."
+            f"{baseline_ranking_path} not found — run 'train-baseline' before 'train-uplift'."
         )
 
-    X_train, X_test, treatment_train, treatment_test, y_train, y_test = load_processed_split(args.processed_dir)
-    y_train_target, y_test_target = y_train["visit"], y_test["visit"]
+    X_train, X_test, treatment_train, treatment_test, y_train, y_test = load_processed_split(
+        args.processed_dir
+    )
+    y_train_target = y_train["visit"]
+    y_test_target = y_test["visit"]
     baseline_ranking = pd.read_csv(baseline_ranking_path)
 
     log(f"Training Two-Model Approach, random_state={args.seed} ...")
     uplift_two_model, _, _ = uplift_models.two_model_approach(
-        X_train, y_train_target, treatment_train, X_test, random_state=args.seed,
+        X_train,
+        y_train_target,
+        treatment_train,
+        X_test,
+        random_state=args.seed,
     )
 
     log(f"Training Class Transformation, random_state={args.seed} ...")
     uplift_class_transform, _ = uplift_models.class_transformation(
-        X_train, y_train_target, treatment_train, X_test, random_state=args.seed,
+        X_train,
+        y_train_target,
+        treatment_train,
+        X_test,
+        random_state=args.seed,
     )
 
-    log(f"Training Causal Forest, random_state={args.seed} (this is the slow step -- "
-        "cross-fitted DML, can take several minutes) ...")
+    log(
+        f"Training Causal Forest, random_state={args.seed} "
+        "(this is the slow step — cross-fitted DML, can take several minutes) ..."
+    )
     uplift_causal_forest, causal_model, library_used = uplift_models.causal_forest_model(
-        X_train, y_train_target, treatment_train, X_test, random_state=args.seed,
+        X_train,
+        y_train_target,
+        treatment_train,
+        X_test,
+        random_state=args.seed,
         auto_install=not args.no_auto_install,
     )
     log(f"Causal Forest fit complete (library: {library_used}).")
 
-    for name, scores in [
+    for model_name, scores in [
         ("Two-Model Approach", uplift_two_model),
         ("Class Transformation", uplift_class_transform),
         ("Causal Forest", uplift_causal_forest),
     ]:
         sc = uplift_models.signal_check_uplift(scores, treatment_test, y_test_target)
         status = "PASSED" if sc["passed"] else "FAILED"
-        log(f"  {name}: signal check {status} (gap {sc['gap']*100:+.2f} pp)")
+        log(f"  {model_name}: signal check {status} (gap {sc['gap'] * 100:+.2f} pp)")
 
     combined = uplift_models.combine_rankings(
-        X_test, treatment_test, y_test,
-        uplift_two_model, uplift_class_transform, uplift_causal_forest,
+        X_test,
+        treatment_test,
+        y_test,
+        uplift_two_model,
+        uplift_class_transform,
+        uplift_causal_forest,
         baseline_ranking,
     )
 
@@ -274,8 +391,12 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     """Evaluation: Qini curves/coefficients, bootstrapped 95% confidence
     intervals, pairwise significance, and the final verdict.
 
-    Reads : {processed_dir}/uplift_scores_combined.csv
-    Writes: {processed_dir}/phase5_results.csv, {reports_dir}/qini_comparison.png
+    Reads : ``{processed_dir}/uplift_scores_combined.csv``
+    Writes: ``{processed_dir}/phase5_results.csv``
+            ``{processed_dir}/phase5_pairwise_significance.csv``
+            ``{processed_dir}/phase5_uplift_at_k.csv``
+            ``{processed_dir}/phase5_verdict.md``
+            ``{reports_dir}/qini_comparison.png``
     """
     ensure_dir(args.reports_dir)
     results_path = os.path.join(args.processed_dir, "phase5_results.csv")
@@ -287,7 +408,9 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
 
     combined_path = os.path.join(args.processed_dir, "uplift_scores_combined.csv")
     if not os.path.exists(combined_path):
-        raise FileNotFoundError(f"{combined_path} not found -- run 'train-uplift' before 'evaluate'.")
+        raise FileNotFoundError(
+            f"{combined_path} not found — run 'train-uplift' before 'evaluate'."
+        )
 
     combined = pd.read_csv(combined_path)
     y_true = combined["actual_visit"].values
@@ -300,7 +423,9 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     }
 
     log("Computing Qini curves and coefficients ...")
-    qini_curves, qini_scores, _ = evaluation.compute_qini_metrics(y_true, treatment, rankings)
+    qini_curves, qini_scores, uplift_at_k_scores = evaluation.compute_qini_metrics(
+        y_true, treatment, rankings
+    )
     for name, score in sorted(qini_scores.items(), key=lambda kv: kv[1], reverse=True):
         log(f"  {name}: Qini AUC {score:+.4f}")
 
@@ -308,25 +433,58 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     log(f"Saved plot -> {plot_path}")
 
     log(f"Bootstrapping 95% confidence intervals (500 resamples, random_state={args.seed}) ...")
-    ci_results = evaluation.bootstrap_qini_ci(y_true, treatment, rankings, qini_scores, n_bootstrap=500, random_state=args.seed)
+    ci_results = evaluation.bootstrap_qini_ci(
+        y_true,
+        treatment,
+        rankings,
+        qini_scores,
+        n_bootstrap=500,
+        random_state=args.seed,
+    )
 
     significance_table = evaluation.pairwise_significance(ci_results)
-    n_distinguishable = (~significance_table["cis_overlap"]).sum()
-    log(f"{n_distinguishable} of {len(significance_table)} model pairs are statistically distinguishable (95% CI).")
+    n_distinguishable = int((~significance_table["cis_overlap"]).sum())
+    log(
+        f"{n_distinguishable} of {len(significance_table)} model pairs are "
+        "statistically distinguishable (95% CI)."
+    )
 
+    # --- phase5_results.csv: Qini coefficients + 95% bootstrap CIs ---
     results_df = pd.DataFrame(ci_results).T.reset_index().rename(columns={"index": "model"})
     results_df = results_df[["model", "qini_coefficient", "ci_lower_95", "ci_upper_95"]]
     results_df.to_csv(results_path, index=False)
     log(f"Saved results -> {results_path}")
+
+    # --- phase5_pairwise_significance.csv: pairwise CI overlap table ---
+    pairwise_path = os.path.join(args.processed_dir, "phase5_pairwise_significance.csv")
+    significance_table.to_csv(pairwise_path, index=False)
+    log(f"Saved pairwise significance -> {pairwise_path}")
+
+    # --- phase5_verdict.md: final verdict markdown ---
+    verdict_text = evaluation.build_final_verdict(qini_scores, ci_results, significance_table)
+    verdict_path = os.path.join(args.processed_dir, "phase5_verdict.md")
+    with open(verdict_path, "w", encoding="utf-8") as verdict_file:
+        verdict_file.write(verdict_text)
+    log(f"Saved verdict -> {verdict_path}")
+
+    # --- phase5_uplift_at_k.csv: uplift_at_k for k=10%/20%/30% per model ---
+    uplift_at_k_rows = [
+        {"model": name, "k": k, "uplift_at_k": v}
+        for name, k_dict in uplift_at_k_scores.items()
+        for k, v in k_dict.items()
+    ]
+    uplift_at_k_path = os.path.join(args.processed_dir, "phase5_uplift_at_k.csv")
+    pd.DataFrame(uplift_at_k_rows).to_csv(uplift_at_k_path, index=False)
+    log(f"Saved uplift-at-k -> {uplift_at_k_path}")
 
 
 def cmd_simulate(args: argparse.Namespace) -> None:
     """Business-impact simulation: budget-constrained targeting
     (10%/20%) vs. random selection.
 
-    Reads : {processed_dir}/uplift_scores_combined.csv
-    Writes: {processed_dir}/phase6_business_impact.csv,
-            {reports_dir}/business_impact_comparison.png
+    Reads : ``{processed_dir}/uplift_scores_combined.csv``
+    Writes: ``{processed_dir}/phase6_business_impact.csv``,
+            ``{reports_dir}/business_impact_comparison.png``
     """
     ensure_dir(args.reports_dir)
     output_path = os.path.join(args.processed_dir, "phase6_business_impact.csv")
@@ -338,7 +496,9 @@ def cmd_simulate(args: argparse.Namespace) -> None:
 
     combined_path = os.path.join(args.processed_dir, "uplift_scores_combined.csv")
     if not os.path.exists(combined_path):
-        raise FileNotFoundError(f"{combined_path} not found -- run 'train-uplift' before 'simulate'.")
+        raise FileNotFoundError(
+            f"{combined_path} not found — run 'train-uplift' before 'simulate'."
+        )
 
     combined = pd.read_csv(combined_path)
     strategy_columns = {
@@ -350,14 +510,17 @@ def cmd_simulate(args: argparse.Namespace) -> None:
 
     log(f"Simulating budget-constrained targeting (10%/20%), random_state={args.seed} ...")
     summary_table = business_simulation.simulate_budget_strategies(
-        combined, strategy_columns, budget_levels=(0.10, 0.20), random_state=args.seed,
+        combined,
+        strategy_columns,
+        budget_levels=(0.10, 0.20),
+        random_state=args.seed,
     )
 
-    strategy_order = list(strategy_columns.keys()) + ["Random Selection"]
+    strategy_order = [*strategy_columns.keys(), "Random Selection"]
     business_simulation.plot_business_impact(summary_table, strategy_order, save_path=plot_path)
     log(f"Saved plot -> {plot_path}")
 
-    beat_random_df, all_beat_random = business_simulation.check_beat_random(summary_table, strategy_order)
+    _, all_beat_random = business_simulation.check_beat_random(summary_table, strategy_order)
     log(f"All strategies beat Random Selection (point estimates): {all_beat_random}")
 
     summary_table.to_csv(output_path, index=False)
@@ -365,8 +528,8 @@ def cmd_simulate(args: argparse.Namespace) -> None:
 
 
 def cmd_run_all(args: argparse.Namespace) -> None:
-    """Run the complete pipeline: prepare-data -> preprocess ->
-    train-baseline -> train-uplift -> evaluate -> simulate, in order.
+    """Run the complete pipeline: prepare-data → preprocess →
+    train-baseline → train-uplift → evaluate → simulate, in order.
 
     Stops immediately (nonzero exit) if any step fails.
     """
@@ -384,67 +547,124 @@ def cmd_run_all(args: argparse.Namespace) -> None:
     log("===== Pipeline complete =====")
 
 
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Argument parsing
-# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+
+
 def build_parser() -> argparse.ArgumentParser:
+    """Build and return the top-level argument parser for the CLI."""
     parser = argparse.ArgumentParser(
         prog="uplift-cli",
-        description="Run the uplift modeling pipeline (data prep through business "
-                     "simulation) from the command line, without opening notebooks.",
+        description=(
+            "Run the uplift modelling pipeline (data prep through business "
+            "simulation) from the command line, without opening notebooks."
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def add_common_args(sp: argparse.ArgumentParser) -> None:
-        sp.add_argument("--data-dir", default="data",
-                         help="Directory for raw data (default: data)")
-        sp.add_argument("--processed-dir", default=os.path.join("data", "processed"),
-                         help="Directory for processed splits and model artifacts (default: data/processed)")
-        sp.add_argument("--reports-dir", default="reports",
-                         help="Directory for saved plots (default: reports)")
-        sp.add_argument("--seed", type=int, default=42,
-                         help="Random seed used for splitting, model training, and bootstrapping (default: 42)")
-        sp.add_argument("--skip-if-exists", action="store_true",
-                         help="Skip this step if its output artifacts already exist "
-                              "(most useful for train-uplift, the expensive Causal Forest step)")
+        sp.add_argument(
+            "--data-dir",
+            default="data",
+            help="Directory for raw data (default: data)",
+        )
+        sp.add_argument(
+            "--processed-dir",
+            default=os.path.join("data", "processed"),
+            help="Directory for processed splits and model artifacts (default: data/processed)",
+        )
+        sp.add_argument(
+            "--reports-dir",
+            default="reports",
+            help="Directory for saved plots (default: reports)",
+        )
+        sp.add_argument(
+            "--seed",
+            type=int,
+            default=42,
+            help="Random seed for splitting, training, and bootstrapping (default: 42)",
+        )
+        sp.add_argument(
+            "--skip-if-exists",
+            action="store_true",
+            help=(
+                "Skip this step if its output artifacts already exist "
+                "(most useful for train-uplift, the expensive Causal Forest step)"
+            ),
+        )
 
-    p_prepare = subparsers.add_parser("prepare-data", help="Download/validate the raw Hillstrom dataset")
+    p_prepare = subparsers.add_parser(
+        "prepare-data", help="Download/validate the raw Hillstrom dataset"
+    )
     add_common_args(p_prepare)
     p_prepare.set_defaults(func=cmd_prepare_data)
 
-    p_preprocess = subparsers.add_parser("preprocess", help="Encode features and create the stratified train/test split")
+    p_preprocess = subparsers.add_parser(
+        "preprocess", help="Encode features and create the stratified train/test split"
+    )
     add_common_args(p_preprocess)
     p_preprocess.set_defaults(func=cmd_preprocess)
 
-    p_baseline = subparsers.add_parser("train-baseline", help="Train and evaluate the naive baseline model")
+    p_baseline = subparsers.add_parser(
+        "train-baseline", help="Train and evaluate the naive baseline model"
+    )
     add_common_args(p_baseline)
     p_baseline.set_defaults(func=cmd_train_baseline)
 
-    p_uplift = subparsers.add_parser("train-uplift", help="Train the three uplift models (Two-Model, Class Transform, Causal Forest)")
+    p_uplift = subparsers.add_parser(
+        "train-uplift",
+        help="Train the three uplift models (Two-Model, Class Transform, Causal Forest)",
+    )
     add_common_args(p_uplift)
-    p_uplift.add_argument("--no-auto-install", action="store_true",
-                           help="Do not attempt a runtime `pip install econml` if econml is missing "
-                                "-- fall back to causalml immediately instead")
+    p_uplift.add_argument(
+        "--no-auto-install",
+        action="store_true",
+        help=(
+            "Do not attempt a runtime `pip install econml` if econml is missing "
+            "— fall back to causalml immediately instead"
+        ),
+    )
     p_uplift.set_defaults(func=cmd_train_uplift)
 
-    p_eval = subparsers.add_parser("evaluate", help="Compute Qini coefficients and bootstrapped confidence intervals")
+    p_eval = subparsers.add_parser(
+        "evaluate",
+        help="Compute Qini coefficients and bootstrapped confidence intervals",
+    )
     add_common_args(p_eval)
     p_eval.set_defaults(func=cmd_evaluate)
 
-    p_sim = subparsers.add_parser("simulate", help="Run the budget-constrained business impact simulation")
+    p_sim = subparsers.add_parser(
+        "simulate", help="Run the budget-constrained business impact simulation"
+    )
     add_common_args(p_sim)
     p_sim.set_defaults(func=cmd_simulate)
 
     p_all = subparsers.add_parser("run-all", help="Run the complete pipeline, in order")
     add_common_args(p_all)
-    p_all.add_argument("--no-auto-install", action="store_true",
-                        help="Do not attempt a runtime `pip install econml` if econml is missing")
+    p_all.add_argument(
+        "--no-auto-install",
+        action="store_true",
+        help="Do not attempt a runtime `pip install econml` if econml is missing",
+    )
     p_all.set_defaults(func=cmd_run_all)
 
     return parser
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
+    """Parse arguments and dispatch to the appropriate subcommand.
+
+    Parameters
+    ----------
+    argv:
+        Argument list; defaults to ``sys.argv[1:]`` when ``None``.
+
+    Returns
+    -------
+    int
+        0 on success, 1 on any error.
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
 

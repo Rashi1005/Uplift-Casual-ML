@@ -3,43 +3,55 @@ prepare_data.py
 ----------------
 Reproducible raw-data workflow for the Hillstrom Email Marketing dataset.
 
-Run this once after a clean clone, before opening any notebook:
+Run this once after a clean clone, before opening any notebook::
 
     python src/prepare_data.py
 
-What it does:
-  1. Downloads the Hillstrom dataset via scikit-uplift's fetch_hillstrom()
-     (the same loader src/data_loader.py already uses).
-  2. Saves the raw dataset to data/hillstrom.csv -- the exact path
-     src/data_loader.py already falls back to when the live download is
-     unavailable, so the two scripts stay consistent with each other.
-  3. Validates that every expected column is present.
-  4. Reports dataset shape, missing values per column, and treatment-group
-     counts (binarized the same way notebooks/01_eda.ipynb does).
+What it does
+~~~~~~~~~~~~
+1. Downloads the Hillstrom dataset via scikit-uplift's
+   ``fetch_hillstrom()`` (the same loader ``src/data_loader.py`` uses).
+2. Saves the raw dataset to ``data/hillstrom.csv`` — the exact path
+   ``src/data_loader.py`` already falls back to when the live download
+   is unavailable, so the two scripts stay consistent with each other.
+3. Validates that every expected column is present.
+4. Reports dataset shape, missing values per column, and treatment-group
+   counts (binarised the same way ``notebooks/01_eda.ipynb`` does).
 
-This script does not train or evaluate any model -- it only prepares the
-raw input the pipeline's notebooks read from.
+This script does **not** train or evaluate any model — it only prepares
+the raw input the pipeline's notebooks read from.
 """
+
+from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 import pandas as pd
 
-# Import the single source of truth for the expected schema, so this script
+# Import the single source of truth for the expected schema so this script
 # and data_loader.py can never silently drift out of sync with each other.
-sys.path.insert(0, os.path.dirname(__file__))
-from data_loader import EXPECTED_COLUMNS, LOCAL_CSV_PATH  # noqa: E402
+sys.path.insert(0, str(Path(__file__).parent))
+from data_loader import EXPECTED_COLUMNS, LOCAL_CSV_PATH
 
-RAW_DATA_DIR = os.path.dirname(LOCAL_CSV_PATH)
+RAW_DATA_DIR: str = os.path.dirname(LOCAL_CSV_PATH)
 
 
 def download_raw_dataset() -> pd.DataFrame:
     """Fetch the raw Hillstrom dataset via scikit-uplift.
 
-    Raises the underlying exception if the download fails (e.g. no network,
-    or the upstream host is unreachable/blocked on a given network) -- the
-    caller decides how to report that.
+    Returns
+    -------
+    pd.DataFrame
+        The full dataset with exactly the columns in ``EXPECTED_COLUMNS``.
+
+    Raises
+    ------
+    Exception
+        Re-raises the underlying exception if the download fails (e.g.
+        no network, or the upstream host is unreachable/blocked on a
+        given network) — the caller decides how to report that.
     """
     from sklift.datasets import fetch_hillstrom
 
@@ -51,12 +63,36 @@ def download_raw_dataset() -> pd.DataFrame:
 
 
 def validate_columns(df: pd.DataFrame) -> None:
+    """Assert that ``df`` contains every column in ``EXPECTED_COLUMNS``.
+
+    Parameters
+    ----------
+    df:
+        DataFrame to validate.
+
+    Raises
+    ------
+    ValueError
+        If any expected column is absent; the message names the missing
+        columns explicitly.
+    """
     missing = set(EXPECTED_COLUMNS) - set(df.columns)
     if missing:
         raise ValueError(f"Downloaded dataset is missing expected columns: {missing}")
 
 
 def report(df: pd.DataFrame) -> None:
+    """Print a human-readable summary of the dataset.
+
+    Reports shape, missing values per column, and binarised
+    treatment-group counts (matching the binarisation used in
+    ``notebooks/01_eda.ipynb``).
+
+    Parameters
+    ----------
+    df:
+        The raw Hillstrom dataset.
+    """
     print(f"\nShape: {df.shape[0]:,} rows x {df.shape[1]} columns")
 
     print("\nMissing values per column:")
@@ -66,7 +102,7 @@ def report(df: pd.DataFrame) -> None:
         print("(none)")
 
     treatment = (df["segment"] != "No E-Mail").astype(int)
-    print("\nTreatment-group counts (binarized: any email = 1, no email = 0):")
+    print("\nTreatment-group counts (binarised: any email = 1, no email = 0):")
     counts = treatment.value_counts().sort_index()
     total = len(treatment)
     for value, count in counts.items():
@@ -75,6 +111,7 @@ def report(df: pd.DataFrame) -> None:
 
 
 def main() -> None:
+    """Entry point: download, validate, save, and report."""
     os.makedirs(RAW_DATA_DIR, exist_ok=True)
 
     print("Downloading Hillstrom Email Marketing dataset via scikit-uplift ...")
@@ -83,7 +120,7 @@ def main() -> None:
     except Exception as exc:
         print(f"\nDownload failed: {exc.__class__.__name__}: {exc}")
         print(
-            "\nThis is a known limitation (see data/MANIFEST.md) -- the upstream "
+            "\nThis is a known limitation (see data/MANIFEST.md) — the upstream "
             "host is occasionally unreachable from restricted networks (e.g. "
             "campus/corporate networks that block direct S3 access). If this "
             "keeps failing:\n"
@@ -91,11 +128,11 @@ def main() -> None:
             "  2. Obtain hillstrom.csv from a teammate who has already run this "
             "script successfully, and place it directly at:\n"
             f"     {LOCAL_CSV_PATH}\n"
-            "  3. Then re-run this script -- it will validate the file you "
+            "  3. Then re-run this script — it will validate the file you "
             "placed there instead of re-downloading."
         )
         if os.path.exists(LOCAL_CSV_PATH):
-            print(f"\nFound an existing file at {LOCAL_CSV_PATH} -- validating it instead.")
+            print(f"\nFound an existing file at {LOCAL_CSV_PATH} — validating it instead.")
             df = pd.read_csv(LOCAL_CSV_PATH)
         else:
             sys.exit(1)

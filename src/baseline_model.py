@@ -1,18 +1,30 @@
 """
 baseline_model.py
 ------------------
-Reusable functions behind notebooks/03_baseline_model.ipynb: training the
-naive (non-causal) LightGBM classifier, evaluating it, building the
+Reusable functions behind ``notebooks/03_baseline_model.ipynb``: training
+the naive (non-causal) LightGBM classifier, evaluating it, building the
 "naive targeting" ranking, and the top-decile signal check.
 
-This module does NOT decide what target column to use -- the caller
-passes `target_col` explicitly (notebooks/03_baseline_model.ipynb passes
-"visit", the corrected target documented in that notebook; see the README
-for why "conversion" was abandoned). This module never silently changes
-that choice.
+This module does **not** decide what target column to use — the caller
+passes ``y_train_target`` explicitly (notebooks/03_baseline_model.ipynb
+passes the ``"visit"`` column, the corrected target documented in that
+notebook; see the README for why ``"conversion"`` was abandoned).
+
+Public API
+----------
+train_baseline_model(X_train, y_train_target, random_state, n_estimators)
+    Train a plain LightGBM classifier.
+evaluate_baseline_model(model, X_test, y_test_target, threshold)
+    Predict on the test set and return standard classification metrics.
+build_ranking(X_test, test_probs, treatment_test, y_test)
+    Build the "naive targeting" ranking DataFrame.
+signal_check(ranking, target_col, top_fraction, min_meaningful_gap_pp)
+    Top-decile vs. rest signal check on a ranking.
 """
 
-from typing import Dict, Tuple
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -37,22 +49,24 @@ def train_baseline_model(
     n_estimators: int = 200,
 ) -> LGBMClassifier:
     """Train a plain LightGBM classifier on the feature matrix to predict
-    `y_train_target`. Treatment must already be excluded from `X_train`
-    by the caller -- this function does not check for or drop it.
+    ``y_train_target``.
 
-    `scale_pos_weight` is computed from the target's own class balance
-    (see utils.compute_scale_pos_weight), exactly as the original
+    Treatment must already be excluded from ``X_train`` by the caller —
+    this function does not check for or drop it.
+
+    ``scale_pos_weight`` is computed from the target's own class balance
+    (see ``utils.compute_scale_pos_weight``), exactly as the original
     notebook did.
 
     Parameters
     ----------
-    X_train : pd.DataFrame
+    X_train:
         Feature matrix (treatment must not be a column).
-    y_train_target : pd.Series
+    y_train_target:
         Binary target to predict.
-    random_state : int
+    random_state:
         Seed, configurable rather than hardcoded.
-    n_estimators : int
+    n_estimators:
         Number of boosting rounds (200 in the original notebook).
 
     Returns
@@ -76,18 +90,30 @@ def evaluate_baseline_model(
     X_test: pd.DataFrame,
     y_test_target: pd.Series,
     threshold: float = 0.5,
-) -> Dict[str, float]:
-    """Predict on `X_test` and report AUC-ROC, precision/recall (at
-    `threshold`), and average precision -- the same metrics notebook 03
-    reports. Accuracy is intentionally not included (see the notebook's
-    markdown for why: it's misleading on this class-imbalanced target).
+) -> dict[str, Any]:
+    """Predict on ``X_test`` and report AUC-ROC, precision/recall (at
+    ``threshold``), and average precision.
+
+    Accuracy is intentionally not included (see the notebook's markdown
+    for why: it is misleading on this class-imbalanced target).
+
+    Parameters
+    ----------
+    model:
+        Fitted LGBMClassifier (output of ``train_baseline_model``).
+    X_test:
+        Feature matrix for the test set.
+    y_test_target:
+        Binary ground-truth labels for the test set.
+    threshold:
+        Classification threshold for precision/recall (default 0.5).
 
     Returns
     -------
     dict
-        Keys: "auc_roc", "precision", "recall", "average_precision",
-        plus "test_probs" (the raw predicted probabilities, needed by
-        the ranking/signal-check steps that follow).
+        Keys: ``"auc_roc"``, ``"precision"``, ``"recall"``,
+        ``"average_precision"``, ``"test_probs"`` (raw predicted
+        probabilities, needed by the ranking/signal-check steps).
     """
     test_probs = model.predict_proba(X_test)[:, 1]
     test_preds = (test_probs >= threshold).astype(int)
@@ -113,27 +139,37 @@ def build_ranking(
 
     Parameters
     ----------
-    X_test : pd.DataFrame
-        Used only for its index (`row_index` in the output).
-    test_probs : np.ndarray
-        Predicted probabilities from evaluate_baseline_model().
-    treatment_test, y_test : the actual treatment and outcome columns
-        for the same rows, in the same order as X_test.
+    X_test:
+        Used only for its index (``row_index`` in the output).
+    test_probs:
+        Predicted probabilities from ``evaluate_baseline_model()``.
+    treatment_test:
+        Actual treatment indicator for the test rows, same order as
+        ``X_test``.
+    y_test:
+        Actual outcome DataFrame for the test rows, same order as
+        ``X_test``; must contain ``"visit"`` and ``"conversion"``.
 
     Returns
     -------
     pd.DataFrame
-        Columns: row_index, predicted_prob, actual_treatment,
-        actual_visit, actual_conversion -- sorted by predicted_prob
-        descending.
+        Columns: ``row_index``, ``predicted_prob``,
+        ``actual_treatment``, ``actual_visit``, ``actual_conversion`` —
+        sorted by ``predicted_prob`` descending.
     """
-    return pd.DataFrame({
-        "row_index": X_test.index,
-        "predicted_prob": test_probs,
-        "actual_treatment": treatment_test.values,
-        "actual_visit": y_test["visit"].values,
-        "actual_conversion": y_test["conversion"].values,
-    }).sort_values("predicted_prob", ascending=False).reset_index(drop=True)
+    return (
+        pd.DataFrame(
+            {
+                "row_index": X_test.index,
+                "predicted_prob": test_probs,
+                "actual_treatment": treatment_test.values,
+                "actual_visit": y_test["visit"].values,
+                "actual_conversion": y_test["conversion"].values,
+            }
+        )
+        .sort_values("predicted_prob", ascending=False)
+        .reset_index(drop=True)
+    )
 
 
 def signal_check(
@@ -141,32 +177,34 @@ def signal_check(
     target_col: str,
     top_fraction: float = 0.10,
     min_meaningful_gap_pp: float = 0.02,
-) -> Dict[str, float]:
-    """Compute the actual `target_col` rate in the top `top_fraction` of
-    the ranking vs. the rest, and flag whether the gap is meaningful.
+) -> dict[str, float]:
+    """Compute the actual ``target_col`` rate in the top ``top_fraction``
+    of the ranking vs. the rest, and flag whether the gap is meaningful.
 
-    This is the check that originally caught the near-random `conversion`
-    model (see notebooks/03_baseline_model.ipynb, Section 2) -- kept as a
-    permanent, reusable safeguard rather than a one-off notebook cell.
+    This is the check that originally caught the near-random
+    ``"conversion"`` model (see ``notebooks/03_baseline_model.ipynb``,
+    Section 2) — kept as a permanent, reusable safeguard rather than a
+    one-off notebook cell.
 
     Parameters
     ----------
-    ranking : pd.DataFrame
-        Output of build_ranking(), must contain an `actual_{target_col}`
-        column.
-    target_col : str
-        Name of the target the ranking was built for (e.g. "visit").
-    top_fraction : float
+    ranking:
+        Output of ``build_ranking()``.  Must contain an
+        ``actual_{target_col}`` column.
+    target_col:
+        Name of the target the ranking was built for (e.g. ``"visit"``).
+    top_fraction:
         Size of the "top" slice to compare (0.10 = top decile, matching
         the original notebook).
-    min_meaningful_gap_pp : float
+    min_meaningful_gap_pp:
         Minimum gap (as a fraction, e.g. 0.02 = 2 percentage points) to
         consider the ranking as carrying meaningful signal.
 
     Returns
     -------
     dict
-        Keys: overall_rate, top_rate, rest_rate, gap, lift_ratio, passed.
+        Keys: ``overall_rate``, ``top_rate``, ``rest_rate``, ``gap``,
+        ``lift_ratio``, ``passed``.
     """
     outcome_col = f"actual_{target_col}"
     top, rest = top_k_split(ranking, "predicted_prob", top_fraction)
