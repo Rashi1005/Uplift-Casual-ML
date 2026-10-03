@@ -1,11 +1,14 @@
 # Uplift Modeling for Targeted Interventions
 ### A Causal Machine Learning Approach
 
+[![CI](https://github.com/Rashi1005/Uplift-Casual-ML/actions/workflows/ci.yml/badge.svg)](https://github.com/Rashi1005/Uplift-Casual-ML/actions/workflows/ci.yml)
+
 A complete, phase-wise causal machine learning pipeline that answers a different question than standard predictive ML: not *"will this customer visit or buy?"* but *"will sending this customer a marketing email cause them to visit or buy, versus what they'd have done anyway?"*
 
 This is the exact problem real companies solve when deciding who to target with a promotion — Netflix, Amazon, and Uber all apply causal inference in production, each to a different use case (see [Background](#background) below).
 
 ---
+
 
 ## What this project does
 
@@ -241,7 +244,11 @@ Uplift-Casual-ML/
 ├── dashboard/
 │   └── index.html               # interactive results dashboard
 ├── requirements.txt
+├── requirements-ci.txt          # lean CI deps (no jupyter/matplotlib/econml)
 ├── pyproject.toml               # pytest, ruff (linter + formatter) configuration
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # GitHub Actions CI (lint → fast tests → CLI smoke)
 └── README.md
 ```
 
@@ -299,7 +306,43 @@ ruff check src/ tests/      # lint — reports violations
 ruff format src/ tests/     # format — applies consistent style in-place
 ```
 
+**Reproducing exactly what CI runs** (uses [`requirements-ci.txt`](requirements-ci.txt) — no jupyter, no matplotlib):
+
+```bash
+# Fast suite (what runs on every PR):
+pip install -r requirements-ci.txt
+pytest -m "not slow" -v
+
+# Full suite (what runs on pushes to main):
+pip install -r requirements-ci.txt && pip install econml
+pytest -v
+
+# CLI smoke (what runs on every PR):
+python -m src.cli --help
+```
+
 ---
+
+## Continuous integration
+
+GitHub Actions CI (`.github/workflows/ci.yml`) runs automatically on every push to `main` and every pull request targeting `main`.
+
+| Job | When | What it checks |
+|---|---|---|
+| **lint** | Every push + PR | `ruff check` (lint) and `ruff format --check` (formatting) |
+| **test-fast** | Every push + PR | `pytest -m "not slow"` on Python 3.11 and 3.12 (~60 tests, ~40 s) |
+| **test-full** | Pushes to `main` only | Full `pytest` including slow Causal Forest fits (~66 tests, ~2.5 min) |
+| **cli-smoke** | Every push + PR | All 7 CLI `--help` pages + error-exit behaviour |
+
+Key design decisions:
+- **No dataset downloads in CI** — every test uses small synthetic fixtures from `tests/conftest.py`.
+- **No secrets required** — nothing contacts an external service.
+- **`econml` only for the full suite** — the heavy Causal Forest library is installed only in the `test-full` job (main pushes), keeping PR feedback fast.
+- **Pip caching** — `actions/setup-python` caches the pip wheel cache so re-runs are fast after the first install.
+- **Concurrency cancellation** — stale PR builds are cancelled automatically when a new commit is pushed.
+
+---
+
 
 ## Background
 

@@ -1,0 +1,39 @@
+# Runtime dependencies needed for the full test suite.
+#
+# Intentional omissions vs. requirements.txt:
+#
+#   jupyter       — development-only; not needed for tests or linting.
+#                   Including it would add ~2 min to every CI run.
+#
+#   matplotlib    — used only inside plot functions (plot_qini_curves,
+#   seaborn         plot_business_impact). Those functions are imported
+#                   lazily (inside the function body), so no test triggers
+#                   them. Excluding saves ~30 s and avoids the extra
+#                   Qt/GUI dependency baggage on headless CI runners.
+#
+#   econml        — only needed for @pytest.mark.slow Causal Forest tests,
+#                   which run in the separate full-suite job on main pushes
+#                   only. The fast-suite job (PRs) installs without it.
+#                   Added separately in the full-suite job via:
+#                       pip install econml
+#
+# Run the fast suite locally without econml:
+#   pip install -r requirements-ci.txt
+#   pytest -m "not slow"
+#
+# Run the full suite locally (matches CI on main):
+#   pip install -r requirements-ci.txt && pip install econml
+#   pytest
+
+# ── Core runtime ───────────────────────────────────────────────────────────
+pandas
+numpy
+scipy
+scikit-learn
+joblib
+lightgbm
+scikit-uplift
+
+# ── Test and lint tooling ──────────────────────────────────────────────────
+pytest
+ruff==0.16.10
