@@ -244,6 +244,7 @@ Uplift-Casual-ML/
 ├── dashboard/
 │   └── index.html               # interactive results dashboard
 ├── requirements.txt
+├── requirements-dev.txt         # dev tools: pytest, ruff
 ├── requirements-ci.txt          # lean CI deps (no jupyter/matplotlib/econml)
 ├── pyproject.toml               # pytest, ruff (linter + formatter) configuration
 ├── .github/
@@ -256,13 +257,85 @@ Uplift-Casual-ML/
 
 ## Setup
 
+### Prerequisites
+
+| Requirement | Minimum | Tested with |
+|---|---|---|
+| **Python** | 3.11 | 3.12.5 |
+| **pip** | 23.0 | 26.2 |
+| OS | Linux / macOS / Windows | Windows 11 + Ubuntu 22.04 (CI) |
+
+> [!NOTE]
+> **econml** (the Causal Forest backend) pulls in heavy transitive dependencies
+> (`numba`, `shap`, `statsmodels`). Installed automatically with `requirements.txt`.
+> Not needed to run Phases 1-3 — only Phase 4's Causal Forest uses them.
+
+---
+
+### 1 — Clone the repository
+
 ```bash
 git clone https://github.com/Rashi1005/Uplift-Casual-ML.git
 cd Uplift-Casual-ML
+```
+
+---
+
+### 2 — Create and activate a virtual environment
+
+**Linux / macOS**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**Windows (PowerShell)**
+```powershell
 python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+venv\Scripts\Activate.ps1
+```
+
+**Windows (Command Prompt)**
+```cmd
+python -m venv venv
+venv\Scripts\activate.bat
+```
+
+After activation your prompt shows `(venv)`. All `pip` and `python` commands
+from here on run inside the venv.
+
+---
+
+### 3 — Install runtime dependencies
+
+```bash
 pip install -r requirements.txt
 ```
+
+Installs everything for the six notebooks and CLI: scientific computing, LightGBM,
+scikit-uplift, EconML, matplotlib, seaborn, and Jupyter.
+
+> [!TIP]
+> First-time installs take 3–5 minutes because **econml** and **numba** are large
+> packages with compiled extensions. Subsequent installs from the pip cache are fast.
+
+---
+
+### 4 — Install development dependencies *(optional)*
+
+For running tests and linting (not needed just to use the project):
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Equivalently, using `pyproject.toml` optional dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+This adds `pytest` and `ruff` on top of the runtime dependencies.
 
 ### Preparing the data
 

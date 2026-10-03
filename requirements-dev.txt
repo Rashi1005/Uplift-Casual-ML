@@ -1,0 +1,23 @@
+# requirements-dev.txt — Development dependencies for Uplift-Casual-ML
+#
+# Install these in addition to requirements.txt when contributing to the
+# project (running tests, linting, or formatting code):
+#
+#   pip install -r requirements.txt
+#   pip install -r requirements-dev.txt
+#
+# Or equivalently, using pyproject.toml optional-dependencies:
+#
+#   pip install -e ".[dev]"
+#
+# These are NOT needed to run the notebooks or CLI — only for development.
+
+-r requirements.txt
+
+# ── Testing ───────────────────────────────────────────────────────────────
+pytest>=7.4          # tested: 9.1.1  — test runner (markers, filterwarnings via pyproject.toml)
+
+# ── Linting and formatting ────────────────────────────────────────────────
+# Pinned exactly so local lint results match CI exactly (see .github/workflows/ci.yml).
+# Upgrade deliberately: run `ruff check src/ tests/` after upgrading to catch new rules.
+ruff==0.16.10

@@ -1,39 +1,33 @@
-# Runtime dependencies needed for the full test suite.
+# requirements-ci.txt — Lean dependencies for GitHub Actions CI
 #
-# Intentional omissions vs. requirements.txt:
+# Intentional omissions vs requirements.txt:
 #
-#   jupyter       — development-only; not needed for tests or linting.
-#                   Including it would add ~2 min to every CI run.
+#   jupyter       — development/notebook only; adds ~2 min to CI installs.
 #
-#   matplotlib    — used only inside plot functions (plot_qini_curves,
-#   seaborn         plot_business_impact). Those functions are imported
-#                   lazily (inside the function body), so no test triggers
-#                   them. Excluding saves ~30 s and avoids the extra
-#                   Qt/GUI dependency baggage on headless CI runners.
+#   matplotlib    — imported lazily (inside plot functions only); no test
+#   seaborn         in the suite calls a plot function directly.
 #
 #   econml        — only needed for @pytest.mark.slow Causal Forest tests,
-#                   which run in the separate full-suite job on main pushes
-#                   only. The fast-suite job (PRs) installs without it.
-#                   Added separately in the full-suite job via:
-#                       pip install econml
+#                   which run in the separate test-full job (main pushes only).
+#                   Added in that job via: pip install "econml>=0.15"
 #
 # Run the fast suite locally without econml:
 #   pip install -r requirements-ci.txt
 #   pytest -m "not slow"
 #
 # Run the full suite locally (matches CI on main):
-#   pip install -r requirements-ci.txt && pip install econml
+#   pip install -r requirements-ci.txt && pip install "econml>=0.15"
 #   pytest
 
-# ── Core runtime ───────────────────────────────────────────────────────────
-pandas
-numpy
-scipy
-scikit-learn
-joblib
-lightgbm
-scikit-uplift
+# ── Core runtime ──────────────────────────────────────────────────────────
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+joblib>=1.2
+scikit-learn>=1.3
+lightgbm>=4.0
+scikit-uplift>=0.5.0
 
-# ── Test and lint tooling ──────────────────────────────────────────────────
-pytest
+# ── Test and lint tooling ─────────────────────────────────────────────────
+pytest>=7.4
 ruff==0.16.10

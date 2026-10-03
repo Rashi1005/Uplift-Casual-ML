@@ -1,12 +1,40 @@
-pandas
-numpy
-scipy
-matplotlib
-seaborn
-scikit-learn
-joblib
-lightgbm
-jupyter
-scikit-uplift
-econml
-pytest
+# requirements.txt — Runtime dependencies for Uplift-Casual-ML
+#
+# Covers everything needed to:
+#   - run the six Jupyter notebooks (01_eda through 06_business_simulation)
+#   - run the CLI pipeline (`python -m src.cli run-all`)
+#   - import all src/ modules
+#
+# Tested with Python 3.12.5 on Windows (see pyproject.toml for full
+# version matrix).  The version floors below are the minimum versions
+# known to work with the current codebase; the upper bound is uncapped.
+#
+# Exact versions used during development are listed in comments so
+# contributors can reproduce the tested environment precisely if needed:
+#
+#   pip install -r requirements.txt
+#
+# For development tools (pytest, ruff), see requirements-dev.txt.
+# For CI (no jupyter, lean install), see requirements-ci.txt.
+
+# ── Core scientific computing ──────────────────────────────────────────────
+numpy>=1.24          # tested: 2.4.6  — 1.24 introduced the stable Generator API
+pandas>=2.0          # tested: 3.0.5  — 2.0 made Copy-on-Write semantics explicit
+scipy>=1.10          # tested: 1.18.0 — stats module used in preprocessing.py
+joblib>=1.2          # tested: 1.5.3  — model serialisation in cli.py
+
+# ── Machine learning ──────────────────────────────────────────────────────
+scikit-learn>=1.3    # tested: 1.9.0  — ColumnTransformer, StratifiedShuffleSplit
+lightgbm>=4.0        # tested: 4.7.0  — LGBMClassifier/LGBMRegressor
+
+# ── Uplift / causal ML ────────────────────────────────────────────────────
+scikit-uplift>=0.5.0 # tested: 0.5.1  — qini_curve, uplift_curve
+econml>=0.15         # tested: 0.17.0 — CausalForestDML (optional; loaded lazily
+                     #                  inside causal_forest_model() only)
+
+# ── Visualisation ─────────────────────────────────────────────────────────
+matplotlib>=3.7      # tested: 3.11.1 — used in notebooks and src/ plot functions
+seaborn>=0.12        # tested: 0.13.2 — used in notebook 01_eda.ipynb only
+
+# ── Notebooks ─────────────────────────────────────────────────────────────
+jupyter>=1.0         # tested: 1.1.1  — JupyterLab + classic notebook server
