@@ -43,6 +43,7 @@ try:
         baseline_model,
         business_simulation,
         evaluation,
+        pipeline_meta,
         preprocessing,
         uplift_models,
         utils,
@@ -54,6 +55,7 @@ except ImportError:
     import baseline_model
     import business_simulation
     import evaluation
+    import pipeline_meta
     import prepare_data as _prepare_data
     import preprocessing
     import uplift_models
@@ -241,6 +243,21 @@ def cmd_preprocess(args: argparse.Namespace) -> None:
         f"splits -> {args.processed_dir}/"
     )
 
+    pipeline_meta.write_run_metadata(
+        command="preprocess",
+        processed_dir=args.processed_dir,
+        random_seed=args.seed,
+        dataset={
+            "n_train": len(X_train),
+            "n_test": len(X_test),
+            "n_features": len(X_train.columns),
+            "feature_columns": list(X_train.columns),
+            "treatment_column": "treatment",
+            "outcome_column": "visit",
+        },
+        artifacts_written=output_paths,
+    )
+
 
 def cmd_train_baseline(args: argparse.Namespace) -> None:
     """Baseline model training: naive LightGBM classifier, evaluation,
@@ -294,6 +311,26 @@ def cmd_train_baseline(args: argparse.Namespace) -> None:
     ranking.to_csv(ranking_path, index=False)
     log(f"Saved model -> {model_path}")
     log(f"Saved ranking -> {ranking_path}")
+
+    pipeline_meta.write_run_metadata(
+        command="train-baseline",
+        processed_dir=args.processed_dir,
+        random_seed=args.seed,
+        dataset={
+            "n_train": len(X_train),
+            "n_test": len(X_test),
+            "n_features": len(X_train.columns),
+            "treatment_column": "treatment",
+            "outcome_column": "visit",
+        },
+        model_params={
+            "model_type": "LGBMClassifier",
+            "n_estimators": 200,
+            "random_state": args.seed,
+            "class_weight": "balanced_via_scale_pos_weight",
+        },
+        artifacts_written=[model_path, ranking_path],
+    )
 
 
 def cmd_train_uplift(args: argparse.Namespace) -> None:
@@ -386,6 +423,25 @@ def cmd_train_uplift(args: argparse.Namespace) -> None:
     log(f"Saved causal forest model -> {causal_forest_path}")
     log(f"Saved combined rankings -> {combined_path}")
 
+    pipeline_meta.write_run_metadata(
+        command="train-uplift",
+        processed_dir=args.processed_dir,
+        random_seed=args.seed,
+        dataset={
+            "n_train": len(X_train),
+            "n_test": len(X_test),
+            "n_features": len(X_train.columns),
+            "treatment_column": "treatment",
+            "outcome_column": "visit",
+        },
+        model_params={
+            "two_model_approach": {"model_type": "LGBMClassifier", "random_state": args.seed},
+            "class_transformation": {"model_type": "LGBMClassifier", "random_state": args.seed},
+            "causal_forest": {"model_type": library_used, "random_state": args.seed},
+        },
+        artifacts_written=[causal_forest_path, combined_path],
+    )
+
 
 def cmd_evaluate(args: argparse.Namespace) -> None:
     """Evaluation: Qini curves/coefficients, bootstrapped 95% confidence
@@ -477,6 +533,21 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     pd.DataFrame(uplift_at_k_rows).to_csv(uplift_at_k_path, index=False)
     log(f"Saved uplift-at-k -> {uplift_at_k_path}")
 
+    pipeline_meta.write_run_metadata(
+        command="evaluate",
+        processed_dir=args.processed_dir,
+        random_seed=args.seed,
+        evaluation_metrics={
+            name: {
+                "qini_coefficient": ci_results[name]["qini_coefficient"],
+                "ci_lower_95": ci_results[name]["ci_lower_95"],
+                "ci_upper_95": ci_results[name]["ci_upper_95"],
+            }
+            for name in ci_results
+        },
+        artifacts_written=[results_path, pairwise_path, verdict_path, uplift_at_k_path, plot_path],
+    )
+
 
 def cmd_simulate(args: argparse.Namespace) -> None:
     """Business-impact simulation: budget-constrained targeting
@@ -525,6 +596,14 @@ def cmd_simulate(args: argparse.Namespace) -> None:
 
     summary_table.to_csv(output_path, index=False)
     log(f"Saved results -> {output_path}")
+
+    pipeline_meta.write_run_metadata(
+        command="simulate",
+        processed_dir=args.processed_dir,
+        random_seed=args.seed,
+        model_params={"budget_levels": [0.10, 0.20]},
+        artifacts_written=[output_path, plot_path],
+    )
 
 
 def cmd_run_all(args: argparse.Namespace) -> None:
