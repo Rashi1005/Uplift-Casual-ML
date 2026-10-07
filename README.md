@@ -1,280 +1,454 @@
 # Uplift Modeling for Targeted Interventions
+
 ### A Causal Machine Learning Approach
 
 [![CI](https://github.com/Rashi1005/Uplift-Casual-ML/actions/workflows/ci.yml/badge.svg)](https://github.com/Rashi1005/Uplift-Casual-ML/actions/workflows/ci.yml)
 
-A complete, phase-wise causal machine learning pipeline that answers a different question than standard predictive ML: not *"will this customer visit or buy?"* but *"will sending this customer a marketing email cause them to visit or buy, versus what they'd have done anyway?"*
+A phase-wise causal machine learning pipeline for answering a question that standard predictive machine learning cannot answer directly:
 
-This is the exact problem real companies solve when deciding who to target with a promotion — Netflix, Amazon, and Uber all apply causal inference in production, each to a different use case (see [Background](#background) below).
+> Will sending this customer a marketing email cause them to visit or buy, compared with what they would have done without the email?
+
+This project applies uplift modeling to a randomized email marketing experiment. It compares a naive response model with several uplift and causal models, evaluates their rankings using Qini metrics, and translates the results into budget-constrained targeting scenarios.
 
 ---
 
+## Project status
+
+The core analysis pipeline, reusable Python modules, command-line interface, automated tests, CI configuration, results dashboard, and project documentation are implemented.
+
+The project is suitable for:
+
+- Causal ML and uplift-modeling research
+- Educational use
+- Portfolio demonstration
+- Experiment design
+- Exploratory marketing-targeting analysis
+
+It should not be treated as a production targeting policy without validation on a new randomized holdout experiment.
+
+---
 
 ## What this project does
 
-Given a dataset from a real randomized email marketing experiment, this project:
+Given the Hillstrom Email Marketing dataset, this project:
 
-1. Validates that treatment assignment was genuinely randomized
-2. Trains a naive predictive baseline (the common, causally-blind approach)
-3. Builds three uplift models of increasing methodological rigor
-4. Evaluates all four using the Qini coefficient with bootstrapped 95% confidence intervals — the field's standard metric, not accuracy or F1
-5. Translates the results into a business-facing budget simulation
-6. Reports findings honestly, including a statistically inconclusive result, rather than overclaiming a winner
+1. Validates whether treatment assignment was sufficiently randomized.
+2. Prepares customer features for modeling.
+3. Trains a naive predictive baseline.
+4. Trains three uplift or causal models.
+5. Evaluates all four strategies using Qini coefficients.
+6. Computes bootstrap 95% confidence intervals.
+7. Compares model rankings at different targeting budgets.
+8. Simulates estimated incremental visits under 10% and 20% contact budgets.
+9. Provides a static interactive dashboard.
+10. Documents the results and their limitations without overstating statistical evidence.
 
 ---
 
 ## Headline finding
 
-**None of the four models — including the naive baseline — can be shown to be statistically distinguishable from random targeting at this dataset's sample size.**
+**None of the four models can be shown to be statistically distinguishable from random targeting at the 95% confidence level for this test set.**
 
-The Two-Model Approach had the highest point-estimate Qini coefficient (0.0234), but every model's 95% confidence interval included zero and overlapped substantially with every other model's. This mirrors a documented limitation in [Diemert et al. (2018)](http://papers.adkdd.org/2018/papers/adkdd18-diemert-large-scale.pdf), the paper behind the large-scale Criteo uplift benchmark, who found similar statistical indistinguishability at comparable sample sizes.
+The Two-Model Approach achieved the highest point-estimate Qini coefficient:
 
-This is reported as a genuine, citable methodological finding — not hidden or adjusted to produce a cleaner story.
+```text
+0.0234
+```
+
+However, its 95% confidence interval includes zero and overlaps substantially with the confidence intervals of the other models.
+
+Therefore, the appropriate conclusion is:
+
+> The Two-Model Approach produced the highest point estimate in this run, but the available evidence is insufficient to declare it a statistically confirmed winner.
+
+This distinction between point estimates and statistical evidence is central to the project.
 
 ---
 
 ## Dataset
 
-**Hillstrom Email Marketing dataset** — 64,000 customers from a real randomized controlled trial (RCT).
+The project uses the **Hillstrom Email Marketing dataset**, which contains 64,000 customers from a randomized email marketing experiment.
 
-| | |
-|---|---|
+The original dataset contains three treatment arms:
+
+- `Mens E-Mail`
+- `Womens E-Mail`
+- `No E-Mail`
+
+For the primary analysis, the two email arms are combined:
+
+```text
+Treatment: received either email
+Control: received no email
+```
+
+### Dataset summary
+
+| Property | Value |
+|---|---:|
 | Total customers | 64,000 |
-| Treatment group | 66.71% (received a marketing email) |
-| Control group | 33.29% (received nothing) |
-| Train / test split | 51,200 / 12,800 (80/20, stratified by treatment + outcome) |
-| Randomization check | Passed — max SMD 0.0071, all chi-square p > 0.05 |
+| Treatment group | 42,694 customers, 66.71% |
+| Control group | 21,306 customers, 33.29% |
+| Training set | 51,200 customers |
+| Test set | 12,800 customers |
+| Split | 80/20, stratified by treatment and outcome |
+| Primary outcome | `visit` |
+| Additional outcomes | `conversion`, `spend` |
 
-Full schema, source, and known limitations are documented in [`data/MANIFEST.md`](data/MANIFEST.md).
+The primary target is `visit` because `conversion` is a rare outcome in this dataset. The `conversion` and `spend` columns are retained for future analysis.
+
+Full schema, source information, preparation instructions, and known data limitations are documented in:
+
+```text
+data/MANIFEST.md
+```
+
+The raw dataset is not committed to the repository. It is downloaded locally using the preparation workflow.
+
+---
+
+## Research questions
+
+The project investigates the following questions:
+
+1. Was the original treatment assignment sufficiently balanced?
+2. How well does a naive response model rank likely visitors?
+3. Do uplift models produce better incremental-response rankings?
+4. Are apparent model differences statistically meaningful?
+5. Does the preferred targeting strategy change with the contact budget?
+6. How should the results be interpreted from a business perspective?
 
 ---
 
 ## Pipeline
 
-| Phase | Notebook | What it does |
-|---|---|---|
-| 1 | `01_eda.ipynb` | Load data, validate randomization, compute naive reference uplift |
-| 2 | `02_preprocessing.ipynb` | Encode features, stratified train/test split, post-split verification |
-| 3 | `03_baseline_model.ipynb` | Naive LightGBM classifier (target corrected from `conversion` → `visit` after the first attempt scored near-random — documented as a methodological finding, not hidden) |
-| 4 | `04_uplift_models.ipynb` | Two-Model Approach, Class Transformation, Causal Forest (EconML) |
-| 5 | `05_evaluation_qini.ipynb` | Qini coefficients + bootstrapped 95% confidence intervals |
-| 6 | `06_business_simulation.ipynb` | Budget-constrained targeting simulation (10% / 20%) vs. random selection |
+| Phase | Notebook | Reusable module | Description |
+|---|---|---|---|
+| 1 | `01_eda.ipynb` | `src/data_loader.py`, `src/preprocessing.py` | Load data, check treatment balance, inspect outcomes |
+| 2 | `02_preprocessing.ipynb` | `src/preprocessing.py` | Encode features and create stratified train/test splits |
+| 3 | `03_baseline_model.ipynb` | `src/baseline_model.py` | Train and evaluate a naive LightGBM response model |
+| 4 | `04_uplift_models.ipynb` | `src/uplift_models.py` | Train Two-Model, Class Transformation, and Causal Forest models |
+| 5 | `05_evaluation_qini.ipynb` | `src/evaluation.py` | Compute Qini metrics and bootstrap confidence intervals |
+| 6 | `06_business_simulation.ipynb` | `src/business_simulation.py` | Simulate targeting under 10% and 20% budgets |
 
-Each phase's output was independently verified against saved data files before moving to the next.
-
----
-
-## Code structure: notebooks vs. modules
-
-The core modeling logic behind each phase lives in reusable Python modules under `src/`, not only inline in the notebooks. Each notebook now reads as an explanatory walkthrough — the markdown commentary, the reasoning, the printed diagnostics — while the actual computation (encoding, training, evaluation, simulation) is a call into the matching module. This means the same functions can be reused outside a notebook (a script, an API, a future dashboard backend) without copy-pasting logic, and any bug fix only needs to happen in one place.
-
-| Module | Used by | What it contains |
-|---|---|---|
-| `src/data_loader.py` | all notebooks, `src/cli.py` | Loads the Hillstrom dataset (live download or local cache) |
-| `src/prepare_data.py` | — (standalone script) | Raw-data download, validation, and reporting (see "Preparing the data" below) |
-| `src/preprocessing.py` | `01_eda.ipynb`, `02_preprocessing.ipynb` | Treatment binarization, randomization/balance checks, one-hot encoding, stratified train/test split and its post-split verification |
-| `src/baseline_model.py` | `03_baseline_model.ipynb` | Training and evaluating the naive (non-causal) classifier, building its ranking, and the top-decile signal check |
-| `src/uplift_models.py` | `04_uplift_models.ipynb` | Two-Model Approach, Class Transformation, Causal Forest (with the econml → causalml fallback), the uplift signal check, and combining all rankings into one table |
-| `src/evaluation.py` | `05_evaluation_qini.ipynb` | Qini curves/coefficients, the comparison plot, bootstrapped confidence intervals, pairwise significance, and the dynamically-generated final verdict |
-| `src/business_simulation.py` | `06_business_simulation.ipynb` | The budget-constrained targeting simulation, its comparison plot, and the beat-random check |
-| `src/utils.py` | `baseline_model.py`, `uplift_models.py`, `business_simulation.py` | Small helpers shared by more than one module (column-name sanitization, class-weight computation, top-k splitting, actual-uplift calculation) — extracted specifically to avoid the duplication that existed when this logic lived separately inside each notebook |
-| `src/cli.py` | — (entry point) | Command-line interface that orchestrates all of the above without opening notebooks (see below) |
-
-**Design choices carried through every module:**
-- **Random seeds are always a parameter** (`random_state=...`), never hardcoded inside a function — every notebook and CLI command still controls and prints the seed it used.
-- **File paths are always a parameter or passed in by the caller** — no module hardcodes `data/processed/...`; that path lives in the notebook or CLI invocation that calls it.
-- **The target variable, treatment definition, and evaluation methodology are unchanged** from the original notebooks — this was a structural refactor, not a re-analysis. Every module was checked by re-running its notebook against the real, already-verified `data/processed/` files and confirming the output numbers matched exactly (e.g. the Phase 3 AUC-ROC of 0.6021, the Phase 5 Qini coefficients, and the Phase 4 signal-check results all reproduce identically).
+The notebooks are explanatory walkthroughs. The reusable computation is implemented in Python modules under `src/`.
 
 ---
 
-## Running the pipeline from the command line
+## Code structure
 
-Every phase can also be run without opening a notebook, via `src/cli.py`. This calls the exact same `src/` module functions the notebooks call — it's an alternative way to run the pipeline, not a second implementation of it.
+### Data and preparation modules
+
+| Module | Purpose |
+|---|---|
+| `src/data_loader.py` | Load the Hillstrom dataset from scikit-uplift or the local cache |
+| `src/prepare_data.py` | Download, validate, save, and report on the raw dataset |
+| `src/pipeline_meta.py` | Record run metadata and command execution information |
+
+### Modeling modules
+
+| Module | Purpose |
+|---|---|
+| `src/preprocessing.py` | Treatment conversion, balance checks, encoding, and splitting |
+| `src/baseline_model.py` | Naive LightGBM response model |
+| `src/uplift_models.py` | Two-Model, Class Transformation, and Causal Forest models |
+| `src/business_simulation.py` | Budget-constrained targeting simulation |
+| `src/evaluation.py` | Qini metrics, bootstrap confidence intervals, and verdict generation |
+| `src/utils.py` | Shared helper functions |
+
+### Command-line interface
+
+```text
+src/cli.py
+```
+
+The CLI runs the pipeline without requiring manual notebook execution.
+
+Available commands:
+
+```text
+prepare-data
+preprocess
+train-baseline
+train-uplift
+evaluate
+simulate
+run-all
+```
+
+### Design principles
+
+- Random seeds are configurable.
+- Paths are configurable.
+- The treatment definition is centralized.
+- Notebook logic is implemented through reusable modules.
+- Tests use small deterministic synthetic fixtures.
+- Raw customer-level records are not exposed through the dashboard.
+- Point estimates are clearly separated from statistical conclusions.
+
+---
+
+## Running the project from the command line
+
+### Basic usage
 
 ```bash
 python -m src.cli <command> [options]
 ```
 
-| Command | What it does | Reads | Writes |
-|---|---|---|---|
-| `prepare-data` | Download/validate the raw dataset | (network) | `{data-dir}/hillstrom.csv` |
-| `preprocess` | Encode features, stratified split | `{data-dir}/hillstrom.csv` | `{processed-dir}/{X,y,treatment}_{train,test}.csv` |
-| `train-baseline` | Train and evaluate the naive baseline | processed split | `{processed-dir}/baseline_model.pkl`, `baseline_ranking.csv` |
-| `train-uplift` | Train all 3 uplift models (slowest step) | processed split + baseline ranking | `{processed-dir}/causal_forest_model.pkl`, `uplift_scores_combined.csv` |
-| `evaluate` | Qini coefficients + bootstrapped 95% CIs | `uplift_scores_combined.csv` | `{processed-dir}/phase5_results.csv`, `phase5_pairwise_significance.csv`, `phase5_uplift_at_k.csv`, `phase5_verdict.md`, `{reports-dir}/qini_comparison.png` |
-| `simulate` | Budget-constrained business impact simulation | `uplift_scores_combined.csv` | `{processed-dir}/phase6_business_impact.csv`, `{reports-dir}/business_impact_comparison.png` |
-| `run-all` | Runs all six of the above, in order | — | all of the above |
+### Available commands
 
-### Common options (every command)
-
-| Option | Default | Purpose |
+| Command | Description | Main outputs |
 |---|---|---|
-| `--data-dir` | `data` | Where the raw dataset lives |
-| `--processed-dir` | `data/processed` | Where splits and model artifacts are read/written |
-| `--reports-dir` | `reports` | Where plots are saved |
-| `--seed` | `42` | Random seed for splitting, model training, and bootstrapping |
-| `--skip-if-exists` | off | Skip a step if its output already exists — most useful on `train-uplift`, the expensive Causal Forest fit, so repeated `run-all` calls don't re-train it every time |
+| `prepare-data` | Download and validate the raw dataset | `data/hillstrom.csv` |
+| `preprocess` | Encode features and create train/test splits | Processed split CSV files |
+| `train-baseline` | Train the naive response model | Baseline model and ranking |
+| `train-uplift` | Train the three uplift models | Uplift scores and causal model |
+| `evaluate` | Compute Qini metrics and confidence intervals | Phase 5 result files and plot |
+| `simulate` | Run business-impact simulation | Phase 6 result file and plot |
+| `run-all` | Run the complete pipeline in order | All generated outputs |
 
-`train-uplift` and `run-all` also accept `--no-auto-install`, which stops the Causal Forest step from attempting a runtime `pip install econml` and falls back to `causalml` immediately instead.
+### Common options
 
-### Examples
+| Option | Default | Description |
+|---|---|---|
+| `--data-dir` | `data` | Directory containing raw data |
+| `--processed-dir` | `data/processed` | Directory for processed data and model artifacts |
+| `--reports-dir` | `reports` | Directory for generated plots |
+| `--seed` | `42` | Random seed |
+| `--skip-if-exists` | disabled | Skip a stage if its outputs already exist |
 
-Run the whole pipeline from scratch, with a different seed, into a separate output folder (useful for comparing against the committed results without overwriting them):
+The `train-uplift` and `run-all` commands also support:
 
-```bash
-python -m src.cli run-all --seed 7 --processed-dir data/processed_seed7 --reports-dir reports_seed7
+```text
+--no-auto-install
 ```
 
-Re-run everything using the default paths and seed (matches the committed `data/processed/` results):
+This prevents runtime installation attempts for missing causal-model dependencies.
+
+### Run the complete pipeline
 
 ```bash
 python -m src.cli run-all
 ```
 
-Already have a trained Causal Forest and just want to re-check the Qini evaluation and business simulation (e.g. after tweaking `evaluate`/`simulate` code) without re-training everything:
+### Run with a different seed and output directory
+
+```bash
+python -m src.cli run-all \
+  --seed 7 \
+  --processed-dir data/processed_seed7 \
+  --reports-dir reports_seed7
+```
+
+### Reuse existing artifacts
 
 ```bash
 python -m src.cli run-all --skip-if-exists
 ```
 
-Run just one phase, e.g. re-train only the baseline model:
+### Run a single phase
 
 ```bash
 python -m src.cli train-baseline --seed 42
 ```
 
-Every command prints `[uplift-cli] ...` progress messages as it runs, and exits with a nonzero status code if a required input file is missing or a step fails — e.g. running `evaluate` before `train-uplift` has produced `uplift_scores_combined.csv` fails immediately with a clear message telling you which command to run first, rather than a raw traceback with no context.
+Every command prints progress messages and returns a nonzero exit status when a required input is missing or a stage fails.
 
 ---
 
-## Test suite
+## Preparing the data
 
-All tests live under `tests/`, are deterministic (every synthetic fixture is built from a seeded RNG), and use small synthetic data rather than the real 64,000-row dataset — none of them require downloading anything or depend on the committed binary model files (`*.pkl`) in `data/processed/`.
+The raw dataset is intentionally not committed to Git.
 
-| File | Covers |
-|---|---|
-| `tests/conftest.py` | Shared fixtures (`rng`, `synthetic_split`, `tiny_split`) used across the files below |
-| `tests/test_data_pipeline.py` | `src/data_loader.py`, `src/prepare_data.py` — loading, schema validation, missing-file behavior |
-| `tests/test_modules.py` | `src/preprocessing.py` through `src/business_simulation.py` — treatment encoding, splitting, balance checks, baseline training, the Two-Model/Class Transformation uplift methods, Qini evaluation, bootstrap CIs, business simulation |
-| `tests/test_uplift_causal_forest.py` | `causal_forest_model()` specifically — split out because, unlike everything else, even a tiny Causal Forest fit takes real time (cross-fitting has fixed overhead). Marked `slow` |
-| `tests/test_error_handling.py` | Malformed (not just missing) input files — empty CSVs, wrong delimiters, truncated files, mismatched lengths, duplicate join keys |
-| `tests/test_cli.py` | `src/cli.py` — argument parsing, exit codes, configurable directories, `--skip-if-exists`. Its multi-command chain test is marked `slow`/`integration` |
-
-### Running the tests
+Install the dependencies and run:
 
 ```bash
-pytest                    # everything, including the slow ones (~35s)
-pytest -m "not slow"      # skip the Causal Forest fit and the CLI chain test (~20s) -- the fast path for quick iteration
-pytest -m slow            # only the slow ones, in isolation
-pytest tests/test_modules.py -v   # a single file
+python src/prepare_data.py
 ```
 
-`pytest.ini` registers the `slow` and `integration` markers (so `--strict-markers` doesn't reject them) and silences one known, upstream-only warning (`scikit-uplift`'s `qini_curve` calling a deprecated `sklearn` utility internally — not this project's own code).
+Equivalent CLI command:
 
-**Current total: 66 tests, all passing.**
+```bash
+python -m src.cli prepare-data
+```
+
+The preparation script:
+
+- Downloads the Hillstrom dataset through scikit-uplift.
+- Saves the data to `data/hillstrom.csv`.
+- Validates the expected columns.
+- Reports the dataset shape.
+- Reports missing values.
+- Reports treatment/control counts.
+
+If the download fails because of network restrictions, consult:
+
+```text
+data/MANIFEST.md
+```
 
 ---
 
 ## Results
 
-### Qini coefficients (95% bootstrap CI)
+### Qini coefficients and 95% bootstrap confidence intervals
 
-| Model | Qini AUC | 95% CI |
-|---|---|---|
+| Model | Qini coefficient | 95% confidence interval |
+|---|---:|---:|
 | Two-Model Approach | 0.0234 | [-0.0041, 0.0520] |
 | Class Transformation | 0.0231 | [-0.0062, 0.0507] |
-| Baseline (naive) | 0.0129 | [-0.0134, 0.0420] |
+| Baseline | 0.0129 | [-0.0134, 0.0420] |
 | Causal Forest | 0.0077 | [-0.0220, 0.0353] |
 
-### Business impact simulation (estimated incremental visits)
+### Uplift at selected targeting percentages
 
-| Strategy | 10% budget | 20% budget |
-|---|---|---|
-| Two-Model Approach | 109.9 | 193.6 |
-| Baseline (naive) | 105.0 | 213.9 |
-| Class Transformation | 91.1 | 192.2 |
-| Causal Forest | 60.2 | 136.2 |
-| Random Selection | 51.5 | 117.2 |
+| Model | 10% | 20% | 30% |
+|---|---:|---:|---:|
+| Baseline | 0.0821 | 0.0836 | 0.0634 |
+| Two-Model Approach | 0.0858 | 0.0754 | 0.0740 |
+| Class Transformation | 0.0712 | 0.0751 | 0.0654 |
+| Causal Forest | 0.0476 | 0.0532 | 0.0596 |
 
-Every real strategy outperformed random selection in point-estimate terms at both budgets — a modest, defensible finding on its own, separate from the statistical significance question above.
+These values are ranking metrics, not direct revenue estimates.
+
+### Business impact simulation
+
+#### 10% contact budget
+
+| Strategy | Customers contacted | Estimated incremental visits |
+|---|---:|---:|
+| Two-Model | 1,280 | 109.9 |
+| Baseline | 1,280 | 105.0 |
+| Class Transformation | 1,280 | 91.1 |
+| Causal Forest | 1,280 | 60.2 |
+| Random Selection | 1,280 | 51.5 |
+
+#### 20% contact budget
+
+| Strategy | Customers contacted | Estimated incremental visits |
+|---|---:|---:|
+| Baseline | 2,560 | 213.9 |
+| Two-Model | 2,560 | 193.6 |
+| Class Transformation | 2,560 | 192.2 |
+| Causal Forest | 2,560 | 136.2 |
+| Random Selection | 2,560 | 117.2 |
+
+All model-based strategies have higher point estimates than random selection at both budget levels.
+
+However, these are point estimates from one held-out test set. They should not be interpreted as guaranteed future business gains.
+
+Detailed results are documented in:
+
+```text
+docs/RESULTS.md
+```
 
 ---
 
-## Artifact workflow
+## Evaluation methodology
 
-All generated files — processed splits, trained models, predictions, evaluation
-results — are listed in [`.gitignore`](.gitignore) and are **not committed to
-the repository**. They are fully reproducible from a clean clone using a fixed
-seed. See [`data/processed/ARTIFACTS.md`](data/processed/ARTIFACTS.md) for
-the complete documentation of every file.
+### Naive baseline
 
-| Artifact category | Location | Git | Generated by |
-|---|---|---|---|
-| Raw dataset | `data/hillstrom.csv` | ❌ ignored | `prepare-data` |
-| Processed splits | `data/processed/X_*.csv`, `y_*.csv`, `treatment_*.csv` | ❌ ignored | `preprocess` |
-| Trained models | `data/processed/*.pkl` | ❌ ignored | `train-baseline`, `train-uplift` |
-| Predictions | `data/processed/baseline_ranking.csv`, `uplift_scores_combined.csv` | ❌ ignored | `train-baseline`, `train-uplift` |
-| Evaluation results | `data/processed/phase5_*.csv`, `phase5_verdict.md` | ❌ ignored | `evaluate` |
-| Business simulation | `data/processed/phase6_business_impact.csv` | ❌ ignored | `simulate` |
-| Run metadata | `data/processed/run_metadata.json`, `run_log.jsonl` | ❌ ignored | every command |
-| Plots | `reports/*.png` | ❌ ignored | `evaluate`, `simulate` |
-| Documentation | `data/MANIFEST.md`, `data/processed/ARTIFACTS.md` | ✅ committed | — |
+The naive baseline is a LightGBM classifier that predicts whether a customer will visit.
 
-**After every successful CLI command**, `src/pipeline_meta.py` writes a
-`run_metadata.json` snapshot and appends one line to `run_log.jsonl`. These
-include: run ID, timestamp, random seed, dataset shape, feature list, model
-parameters, evaluation metrics, and software versions — making every run
-traceable even after re-running the pipeline.
+It is included because it represents a common business approach:
 
-> [!CAUTION]
-> `data/processed/causal_forest_model.pkl` is approximately **89 MB**. It was
-> not previously excluded from Git. If this file is already tracked in your
-> repository history, remove it with `git rm --cached data/processed/causal_forest_model.pkl`
-> and recommit before pushing to GitHub.
+> Contact customers who are most likely to respond.
+
+The baseline does not explicitly estimate treatment effects. It provides a reference point for evaluating whether uplift modeling produces a meaningfully different ranking.
+
+### Two-Model Approach
+
+Two separate models are trained:
+
+1. A model using treated customers.
+2. A model using control customers.
+
+The uplift estimate is:
+
+```text
+predicted outcome under treatment
+-
+predicted outcome under control
+```
+
+### Class Transformation
+
+The Class Transformation method creates a transformed treatment/outcome target and trains a single classifier.
+
+The implementation follows the main methodology used in the project notebooks.
+
+### Causal Forest
+
+The project uses EconML's `CausalForestDML` when available.
+
+The model estimates heterogeneous treatment effects using nuisance models, cross-fitting, and causal forest estimation.
+
+A CausalML fallback is supported when EconML is unavailable and the fallback package is installed.
+
+### Qini evaluation
+
+Qini evaluation measures whether customers with larger estimated incremental effects are ranked near the top.
+
+The project uses scikit-uplift implementations for:
+
+- Qini curves
+- Qini AUC
+- Uplift at selected targeting percentages
+
+### Bootstrap confidence intervals
+
+The test set is resampled with replacement 500 times.
+
+For each resample, the Qini coefficient is recalculated. The 2.5th and 97.5th percentiles are reported as the 95% confidence interval.
+
+Because every interval includes zero, the project does not claim statistically confirmed positive uplift for any model.
 
 ---
 
 ## Interactive dashboard
 
-The dashboard is a self-contained static HTML application located at:
+The dashboard is a self-contained static HTML application:
 
 ```text
 dashboard/index.html
 ```
 
-It includes five views:
+It contains five views:
 
-1. **Overview** — Qini coefficients and 95% confidence intervals.
-2. **Budget simulator** — estimated incremental visits at 10% and 20% contact budgets.
-3. **Persuadables** — explanation of sure things, lost causes, persuadables, and sleeping dogs.
-4. **Customer-level explainer** — illustrative, non-identifying profiles showing how response and uplift scores can lead to different decisions.
-5. **ROI view** — scenario-based value and cost estimates using configurable assumptions.
+1. **Overview** — Qini coefficients and confidence intervals.
+2. **Budget simulator** — estimated incremental visits at 10% and 20% budgets.
+3. **Persuadables** — explanation of response types and uplift modeling.
+4. **Customer-level explainer** — illustrative, non-identifying customer profiles.
+5. **ROI view** — scenario-based value and cost calculation.
 
-The dashboard uses the committed results from:
+The dashboard uses values from:
 
 ```text
 data/processed/phase5_results.csv
 data/processed/phase6_business_impact.csv
 ```
 
-The values are embedded in `dashboard/index.html` intentionally. This allows the dashboard to work when opened directly with a browser, because browsers commonly block local `file://` requests for CSV files.
+The result values are embedded in the HTML intentionally. This allows the dashboard to work when opened directly from the filesystem without requiring a backend or CSV-fetch permission.
 
-### Open the dashboard
+### Open directly
 
-From the repository root:
+Windows PowerShell:
 
-```bash
-# Windows PowerShell
+```powershell
 Start-Process dashboard/index.html
 ```
 
-Or open this file manually in a browser:
+Or open this file manually:
 
 ```text
 dashboard/index.html
 ```
 
-A local static server can also be used:
+### Use a local server
+
+From the repository root:
 
 ```bash
 python -m http.server 8000
@@ -286,257 +460,351 @@ Then open:
 http://localhost:8000/dashboard/index.html
 ```
 
-### Updating dashboard results
+The customer-level profiles shown in the dashboard are illustrative educational examples. They are not predictions for real individuals.
 
-If the model pipeline is rerun and the generated results change:
+If the pipeline is rerun and result values change, update the embedded data objects in:
 
-1. Run the evaluation and business simulation steps.
-2. Read the updated values from:
-   - `data/processed/phase5_results.csv`
-   - `data/processed/phase6_business_impact.csv`
-3. Update the embedded `modelResults` and `budgetResults` objects in:
-   - `dashboard/index.html`
-4. Verify the dashboard manually in a browser.
-
-The customer-level profiles in the dashboard are illustrative examples. They are not predictions for individual customers and do not expose raw customer-level data.
----
-
-## Repository structure
-
-```
-Uplift-Casual-ML/
-├── data/
-│   ├── MANIFEST.md                  # committed: dataset schema, download instructions
-│   ├── hillstrom.csv                # gitignored: downloaded by prepare-data
-│   └── processed/
-│       ├── ARTIFACTS.md             # committed: documents every generated file
-│       └── (all other files)        # gitignored: generated by CLI commands
-├── notebooks/                   # 01 through 06, in pipeline order -- explanatory
-│                                # walkthroughs that call the src/ modules below
-├── src/
-│   ├── data_loader.py
-│   ├── prepare_data.py          # raw-data download, validation, and reporting
-│   ├── preprocessing.py         # Phases 1-2: balance checks, encoding, splitting
-│   ├── baseline_model.py        # Phase 3: naive classifier, ranking, signal check
-│   ├── uplift_models.py         # Phase 4: the three uplift models + combination
-│   ├── evaluation.py            # Phase 5: Qini metrics, bootstrap CIs, verdict
-│   ├── business_simulation.py   # Phase 6: budget simulation
-│   ├── utils.py                 # small helpers shared across the modules above
-│   ├── pipeline_meta.py         # run metadata writer (run_metadata.json, run_log.jsonl)
-│   └── cli.py                   # command-line interface
-├── tests/
-│   ├── conftest.py              # shared fixtures (rng, synthetic_split, tiny_split)
-│   ├── test_data_pipeline.py    # src/data_loader.py, src/prepare_data.py
-│   ├── test_modules.py          # src/preprocessing.py through src/business_simulation.py
-│   ├── test_uplift_causal_forest.py  # causal_forest_model() specifically (marked slow)
-│   ├── test_error_handling.py   # malformed (not just missing) input files
-│   └── test_cli.py              # smoke tests for src/cli.py
-├── reports/                     # Qini and business impact chart images
-├── dashboard/
-│   └── index.html               # interactive results dashboard
-├── requirements.txt
-├── requirements-dev.txt         # dev tools: pytest, ruff
-├── requirements-ci.txt          # lean CI deps (no jupyter/matplotlib/econml)
-├── pyproject.toml               # pytest, ruff (linter + formatter) configuration
-├── .github/
-│   └── workflows/
-│       └── ci.yml               # GitHub Actions CI (lint → fast tests → CLI smoke)
-└── README.md
+```text
+dashboard/index.html
 ```
 
 ---
 
-## Setup
+## Artifact workflow
 
-### Prerequisites
+Generated artifacts are reproducible from a clean clone and are generally excluded from version control when they are large or machine-generated.
 
-| Requirement | Minimum | Tested with |
+| Artifact category | Location | Generated by |
 |---|---|---|
-| **Python** | 3.11 | 3.12.5 |
-| **pip** | 23.0 | 26.2 |
-| OS | Linux / macOS / Windows | Windows 11 + Ubuntu 22.04 (CI) |
+| Raw dataset | `data/hillstrom.csv` | `prepare-data` |
+| Processed features | `data/processed/X_*.csv` | `preprocess` |
+| Processed outcomes | `data/processed/y_*.csv` | `preprocess` |
+| Treatment splits | `data/processed/treatment_*.csv` | `preprocess` |
+| Trained models | `data/processed/*.pkl` | `train-baseline`, `train-uplift` |
+| Predictions/rankings | `data/processed/*ranking.csv` | `train-baseline`, `train-uplift` |
+| Uplift predictions | `data/processed/uplift_scores_*.csv` | `train-uplift` |
+| Evaluation results | `data/processed/phase5_*.csv` | `evaluate` |
+| Evaluation verdict | `data/processed/phase5_verdict.md` | `evaluate` |
+| Business simulation | `data/processed/phase6_business_impact.csv` | `simulate` |
+| Run metadata | `data/processed/run_metadata.json` | Pipeline commands |
+| Run log | `data/processed/run_log.jsonl` | Pipeline commands |
+| Qini plot | `reports/qini_comparison.png` | `evaluate` |
+| Business-impact plot | `reports/business_impact_comparison.png` | `simulate` |
 
-> [!NOTE]
-> **econml** (the Causal Forest backend) pulls in heavy transitive dependencies
-> (`numba`, `shap`, `statsmodels`). Installed automatically with `requirements.txt`.
-> Not needed to run Phases 1-3 — only Phase 4's Causal Forest uses them.
+Artifact details are documented in:
+
+```text
+data/processed/ARTIFACTS.md
+```
+
+The raw dataset and generated model files should not be committed unnecessarily.
+
+The Causal Forest model artifact may be large. If it is already tracked in Git, remove it from version control before pushing future changes:
+
+```bash
+git rm --cached data/processed/causal_forest_model.pkl
+git commit -m "Remove generated causal forest artifact from Git tracking"
+```
 
 ---
 
-### 1 — Clone the repository
+## Test suite
+
+Tests are located in:
+
+```text
+tests/
+```
+
+| Test file | Coverage |
+|---|---|
+| `tests/conftest.py` | Shared deterministic fixtures |
+| `tests/test_data_pipeline.py` | Data loading, schema validation, and missing-file behavior |
+| `tests/test_modules.py` | Preprocessing, baseline, uplift, evaluation, and simulation modules |
+| `tests/test_uplift_causal_forest.py` | Causal Forest behavior and fallback handling |
+| `tests/test_error_handling.py` | Malformed and inconsistent input files |
+| `tests/test_cli.py` | CLI parsing, failures, output paths, and integration behavior |
+
+### Run all tests
 
 ```bash
-git clone https://github.com/Rashi1005/Uplift-Casual-ML.git
-cd Uplift-Casual-ML
-```
-
----
-
-### 2 — Create and activate a virtual environment
-
-**Linux / macOS**
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-**Windows (PowerShell)**
-```powershell
-python -m venv venv
-venv\Scripts\Activate.ps1
-```
-
-**Windows (Command Prompt)**
-```cmd
-python -m venv venv
-venv\Scripts\activate.bat
-```
-
-After activation your prompt shows `(venv)`. All `pip` and `python` commands
-from here on run inside the venv.
-
----
-
-### 3 — Install runtime dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-Installs everything for the six notebooks and CLI: scientific computing, LightGBM,
-scikit-uplift, EconML, matplotlib, seaborn, and Jupyter.
-
-> [!TIP]
-> First-time installs take 3–5 minutes because **econml** and **numba** are large
-> packages with compiled extensions. Subsequent installs from the pip cache are fast.
-
----
-
-### 4 — Install development dependencies *(optional)*
-
-For running tests and linting (not needed just to use the project):
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-Equivalently, using `pyproject.toml` optional dependencies:
-
-```bash
-pip install -e ".[dev]"
-```
-
-This adds `pytest` and `ruff` on top of the runtime dependencies.
-
-### Preparing the data
-
-The raw dataset is not committed to this repository (see [`data/MANIFEST.md`](data/MANIFEST.md)) — download it once, right after installing dependencies, using either the standalone script or the CLI (both do the same thing):
-
-```bash
-python src/prepare_data.py
-# -- or, equivalently --
-python -m src.cli prepare-data
-```
-
-This downloads the Hillstrom dataset, saves it to `data/hillstrom.csv`, validates its schema, and prints shape, missing-value, and treatment-group counts. `src/data_loader.py` (used throughout the notebooks and the CLI) reads from this same file as its local fallback, so everything stays in sync.
-
-If the download fails (a known limitation — see `data/MANIFEST.md`), `prepare_data.py` prints manual fallback instructions rather than failing silently.
-
-Once data preparation succeeds, either open the notebooks:
-
-```bash
-jupyter notebook notebooks/01_eda.ipynb
-```
-
-or run the whole pipeline from the command line (see "Running the pipeline from the command line" above):
-
-```bash
-python -m src.cli run-all
-```
-
-### Running the tests
-
-See the [Test suite](#test-suite) section above for the full breakdown — in short:
-
-```bash
-pytest                      # full suite (includes slow Causal Forest fits)
-pytest -m "not slow"        # fast suite only (~60 tests, completes in seconds)
-```
-
-**Linting and formatting** (configured in [`pyproject.toml`](pyproject.toml)):
-
-```bash
-ruff check src/ tests/      # lint — reports violations
-ruff format src/ tests/     # format — applies consistent style in-place
-```
-
-**Reproducing exactly what CI runs** (uses [`requirements-ci.txt`](requirements-ci.txt) — no jupyter, no matplotlib):
-
-```bash
-# Fast suite (what runs on every PR):
-pip install -r requirements-ci.txt
-pytest -m "not slow" -v
-
-# Full suite (what runs on pushes to main):
-pip install -r requirements-ci.txt && pip install econml
 pytest -v
+```
 
-# CLI smoke (what runs on every PR):
-python -m src.cli --help
+### Run only fast tests
+
+```bash
+pytest -m "not slow" -v
+```
+
+### Run slow tests
+
+```bash
+pytest -m slow -v
+```
+
+### Collect the test count
+
+```bash
+pytest --collect-only -q
+```
+
+The slow tests include Causal Forest fitting and multi-command CLI integration checks.
+
+Tests use deterministic synthetic fixtures and do not require downloading the full dataset.
+
+---
+
+## Code quality and formatting
+
+The project uses Ruff for linting and formatting.
+
+Run linting:
+
+```bash
+ruff check src/ tests/
+```
+
+Check formatting:
+
+```bash
+ruff format --check src/ tests/
+```
+
+Apply formatting:
+
+```bash
+ruff format src/ tests/
+```
+
+Project configuration is stored in:
+
+```text
+pyproject.toml
 ```
 
 ---
 
 ## Continuous integration
 
-GitHub Actions CI (`.github/workflows/ci.yml`) runs automatically on every push to `main` and every pull request targeting `main`.
+GitHub Actions configuration is located at:
 
-| Job | When | What it checks |
-|---|---|---|
-| **lint** | Every push + PR | `ruff check` (lint) and `ruff format --check` (formatting) |
-| **test-fast** | Every push + PR | `pytest -m "not slow"` on Python 3.11 and 3.12 (~60 tests, ~40 s) |
-| **test-full** | Pushes to `main` only | Full `pytest` including slow Causal Forest fits (~66 tests, ~2.5 min) |
-| **cli-smoke** | Every push + PR | All 7 CLI `--help` pages + error-exit behaviour |
+```text
+.github/workflows/ci.yml
+```
 
-Key design decisions:
-- **No dataset downloads in CI** — every test uses small synthetic fixtures from `tests/conftest.py`.
-- **No secrets required** — nothing contacts an external service.
-- **`econml` only for the full suite** — the heavy Causal Forest library is installed only in the `test-full` job (main pushes), keeping PR feedback fast.
-- **Pip caching** — `actions/setup-python` caches the pip wheel cache so re-runs are fast after the first install.
-- **Concurrency cancellation** — stale PR builds are cancelled automatically when a new commit is pushed.
+CI checks include:
 
----
+- Python setup
+- Dependency installation
+- Ruff linting
+- Ruff formatting checks
+- Fast pytest suite
+- CLI smoke checks
+- Full tests on the configured main-branch workflow
 
-
-## Background
-
-Causal inference and uplift modeling are used in production at several major technology companies, each applying the technique differently:
-
-- **Netflix** uses observational causal inference (synthetic control methods) to measure impact when a feature is rolled out to an entire country and no control group remains.
-- **Amazon (AWS)** contributed causal ML algorithms to DoWhy, used for root cause analysis — diagnosing *why* a system issue happened, not just predicting when.
-- **Uber** open-sourced CausalML, purpose-built for uplift modeling and campaign targeting — the closest direct parallel to this project.
+The CI workflow does not require private secrets.
 
 ---
 
-## References
+## Repository structure
 
-- Athey, S., Tibshirani, J., & Wager, S. (2019). *Generalized Random Forests.* Annals of Statistics. [arxiv.org/abs/1610.01271](https://arxiv.org/abs/1610.01271)
-- Gutierrez, P., & Gerardy, J.-Y. (2017). *Causal Inference and Uplift Modelling: A Review of the Literature.* PMLR. [proceedings.mlr.press/v67/gutierrez17a](http://proceedings.mlr.press/v67/gutierrez17a/gutierrez17a.pdf)
-- Belbahri, M., Murua, A., Gandouet, O., & Partovi Nia, V. (2021). *Qini-based Uplift Regression.* Annals of Applied Statistics. [arxiv.org/pdf/1911.12474](https://arxiv.org/pdf/1911.12474)
-- Diemert, E., Betlei, A., Renaudin, C., & Amini, M.-R. (2018). *A Large Scale Benchmark for Uplift Modeling.* AdKDD & TargetAd Workshop, KDD 2018. [papers.adkdd.org](http://papers.adkdd.org/2018/papers/adkdd18-diemert-large-scale.pdf)
+```text
+Uplift-Casual-ML/
+├── data/
+│   ├── MANIFEST.md
+│   ├── hillstrom.csv                  # downloaded locally; gitignored
+│   └── processed/
+│       ├── ARTIFACTS.md
+│       └── generated artifacts
+├── notebooks/
+│   ├── 01_eda.ipynb
+│   ├── 02_preprocessing.ipynb
+│   ├── 03_baseline_model.ipynb
+│   ├── 04_uplift_models.ipynb
+│   ├── 05_evaluation_qini.ipynb
+│   └── 06_business_simulation.ipynb
+├── src/
+│   ├── data_loader.py
+│   ├── prepare_data.py
+│   ├── preprocessing.py
+│   ├── baseline_model.py
+│   ├── uplift_models.py
+│   ├── evaluation.py
+│   ├── business_simulation.py
+│   ├── pipeline_meta.py
+│   ├── utils.py
+│   └── cli.py
+├── tests/
+│   ├── conftest.py
+│   ├── test_data_pipeline.py
+│   ├── test_modules.py
+│   ├── test_uplift_causal_forest.py
+│   ├── test_error_handling.py
+│   └── test_cli.py
+├── reports/
+│   ├── qini_comparison.png
+│   └── business_impact_comparison.png
+├── dashboard/
+│   └── index.html
+├── docs/
+│   ├── PROJECT_OVERVIEW.md
+│   ├── METHODOLOGY.md
+│   ├── ARCHITECTURE.md
+│   ├── REPRODUCIBILITY.md
+│   ├── LIMITATIONS.md
+│   ├── RESULTS.md
+│   └── FINAL_CHECKLIST.md
+├── requirements.txt
+├── requirements-dev.txt
+├── requirements-ci.txt
+├── pyproject.toml
+├── pytest.ini
+├── .gitignore
+└── README.md
+```
+
+---
+
+## Installation
+
+### Prerequisites
+
+| Requirement | Minimum | Tested |
+|---|---:|---:|
+| Python | 3.11 | 3.12 |
+| pip | 23.0 | Recent pip version |
+| Operating system | Windows, macOS, or Linux | Windows and Linux |
+
+### Clone the repository
+
+```bash
+git clone https://github.com/Rashi1005/Uplift-Casual-ML.git
+cd Uplift-Casual-ML
+```
+
+### Create a virtual environment
+
+#### Linux/macOS
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+#### Windows PowerShell
+
+```powershell
+python -m venv venv
+venv\Scripts\Activate.ps1
+```
+
+#### Windows Command Prompt
+
+```cmd
+python -m venv venv
+venv\Scripts\activate.bat
+```
+
+### Install runtime dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Install development dependencies
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Or, if configured in `pyproject.toml`:
+
+```bash
+pip install -e ".[dev]"
+```
+
+The causal forest dependency may require additional compiled packages and can take longer to install than the other dependencies.
+
+---
+
+## Documentation
+
+Detailed project documentation is available under `docs/`:
+
+- [`PROJECT_OVERVIEW.md`](docs/PROJECT_OVERVIEW.md)
+- [`METHODOLOGY.md`](docs/METHODOLOGY.md)
+- [`ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md)
+- [`LIMITATIONS.md`](docs/LIMITATIONS.md)
+- [`RESULTS.md`](docs/RESULTS.md)
+- [`FINAL_CHECKLIST.md`](docs/FINAL_CHECKLIST.md)
+
+The repository currently provides Markdown-based final documentation. Formal `Final_Report.docx` and `Presentation.pptx` files are not included.
 
 ---
 
 ## Limitations
 
-- Causal conclusions depend on treatment having been genuinely randomly assigned — addressed here by using real RCT data and explicitly reporting balance checks.
-- This dataset's size was insufficient to statistically distinguish between models — addressed by reporting bootstrap confidence intervals honestly rather than declaring a winner.
-- Individual-level causal effects can never be directly verified (the fundamental problem of causal inference) — addressed by relying on aggregate, population-level evaluation (Qini) throughout.
+The most important limitations are:
+
+- The dataset may not represent a modern production population.
+- The two email treatment arms are combined into one treatment group.
+- The primary outcome is website visit, not revenue or profit.
+- Conversion is a rare outcome and requires separate modeling.
+- All model confidence intervals include zero.
+- Individual treatment effects cannot be directly observed.
+- Confidence-interval overlap is an informative diagnostic, not a complete paired hypothesis test.
+- Business results are point estimates from one held-out test set.
+- Exact outputs may vary across software versions and causal-model backends.
+- A future randomized holdout is required before production use.
+
+Additional details are documented in:
+
+```text
+docs/LIMITATIONS.md
+```
 
 ---
 
 ## Future work
 
-- Re-run the full pipeline on the larger Criteo Uplift Modeling dataset, where prior published work suggests methods become more statistically distinguishable at scale.
-- Complete the remaining dashboard screens (customer-level explainer, ROI view).
-- Extend evaluation to the `conversion` outcome using methods better suited to rare events.
+Potential future improvements include:
+
+- Re-run the pipeline on the larger Criteo uplift dataset.
+- Analyze the original three-arm treatment design separately.
+- Extend modeling to the rare `conversion` outcome.
+- Add formal paired bootstrap tests for model differences.
+- Add repeated cross-validation and stability analysis.
+- Add confidence intervals to the business simulation.
+- Add real revenue and cost data to the ROI analysis.
+- Add fairness and subgroup-treatment-effect analysis.
+- Add automated dashboard data generation.
+- Add model versioning and experiment tracking.
+- Add a new randomized validation campaign.
+- Add formal PDF report and presentation exports if required.
+
+---
+
+## References
+
+- Athey, S., Tibshirani, J., & Wager, S. (2019). *Generalized Random Forests*. Annals of Statistics.
+- Gutierrez, P., & Gerardy, J.-Y. (2017). *Causal Inference and Uplift Modelling: A Review of the Literature*. PMLR.
+- Belbahri, M., Murua, A., Gandouet, O., & Partovi Nia, V. (2021). *Qini-based Uplift Regression*. Annals of Applied Statistics.
+- Diemert, E., Betlei, A., Renaudin, C., & Amini, M.-R. (2018). *A Large Scale Benchmark for Uplift Modeling*. AdKDD & TargetAd Workshop.
+
+---
+
+## Final scientific conclusion
+
+The project demonstrates the difference between predicting response and estimating incremental treatment effect.
+
+The Two-Model Approach produced the highest Qini point estimate in the current run, but the confidence intervals are wide and overlap with the alternatives. Therefore, the evidence does not support declaring a statistically confirmed best model.
+
+The most defensible next step is not to deploy the apparent winner immediately. It is to use the results to design a new randomized campaign with:
+
+- A pre-specified targeting strategy
+- A randomized holdout group
+- Clearly defined business outcomes
+- Revenue and cost measurement
+- Confidence intervals for the final business impact
