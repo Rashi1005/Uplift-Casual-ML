@@ -1,682 +1,1250 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Uplift Modeling Results — Who Should We Actually Target?</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
-<style>
-  :root {
-    --navy: #1E2761;
-    --navy-dark: #12173F;
-    --ice: #DCE6FB;
-    --ice-soft: #F1F5FD;
-    --amber: #C4900F;
-    --teal: #1C7293;
-    --red: #A6474C;
-    --bg: #FAFBFE;
-    --surface: #FFFFFF;
-    --text: #15172B;
-    --text-muted: #565A78;
-    --border: #E4E8F5;
-    --font-head: 'Newsreader', Georgia, 'Times New Roman', serif;
-    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  }
-  :root[data-theme="dark"] {
-    --bg: #0F1120;
-    --surface: #171A30;
-    --text: #EDEFF9;
-    --text-muted: #A6AAC9;
-    --border: #2A2E4A;
-    --ice-soft: #1C2040;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0F1120;
-      --surface: #171A30;
-      --text: #EDEFF9;
-      --text-muted: #A6AAC9;
-      --border: #2A2E4A;
-      --ice-soft: #1C2040;
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Interactive uplift modeling dashboard for targeted email interventions.">
+  <title>Uplift Modeling Dashboard</title>
+
+  <style>
+    :root {
+      --navy: #1e2761;
+      --navy-dark: #12173f;
+      --teal: #1c7293;
+      --amber: #c4900f;
+      --red: #a6474c;
+      --purple: #7357a6;
+      --gray: #69708a;
+      --bg: #f7f8fc;
+      --surface: #ffffff;
+      --text: #15172b;
+      --muted: #5b6078;
+      --border: #dfe3ef;
+      --success: #287d54;
+      --focus: #168bb5;
+      --shadow: 0 8px 24px rgba(30, 39, 97, 0.08);
+      --radius: 14px;
+      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+      --serif: Georgia, "Times New Roman", serif;
     }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-body);
-    line-height: 1.5;
-  }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
 
-  /* ===== HERO ===== */
-  header.hero {
-    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
-    color: #fff;
-    padding: 64px 0 56px;
-  }
-  .hero-tag {
-    font-size: 14px;
-    color: var(--ice);
-    margin: 0 0 18px;
-    font-weight: 500;
-  }
-  .hero h1 {
-    font-family: var(--font-head);
-    font-weight: 500;
-    font-size: clamp(32px, 4.2vw, 52px);
-    line-height: 1.12;
-    margin: 0 0 20px;
-    max-width: 820px;
-  }
-  .hero p.sub {
-    font-size: 17px;
-    color: var(--ice);
-    max-width: 640px;
-    margin: 0 0 36px;
-  }
-  .hero-stats {
-    display: flex;
-    gap: 48px;
-    flex-wrap: wrap;
-  }
-  .hero-stat .num {
-    font-family: var(--font-head);
-    font-size: 34px;
-    font-weight: 500;
-    color: #fff;
-  }
-  .hero-stat .lbl {
-    font-size: 13px;
-    color: var(--ice);
-    margin-top: 4px;
-  }
-
-  /* ===== SECTIONS ===== */
-  section { padding: 56px 0; border-bottom: 1px solid var(--border); }
-  section:last-of-type { border-bottom: none; }
-  h2 {
-    font-family: var(--font-head);
-    font-weight: 500;
-    font-size: 28px;
-    margin: 0 0 10px;
-  }
-  .section-intro {
-    color: var(--text-muted);
-    max-width: 680px;
-    font-size: 15px;
-    margin: 0 0 32px;
-  }
-
-  /* ===== MODEL COMPARISON ===== */
-  .compare-grid {
-    display: grid;
-    grid-template-columns: 1.4fr 1fr;
-    gap: 32px;
-    align-items: start;
-  }
-  .chart-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 24px;
-  }
-  .chart-card canvas { max-height: 340px; }
-  .finding-card {
-    background: var(--navy);
-    color: #fff;
-    border-radius: 10px;
-    padding: 26px;
-  }
-  .finding-card h3 {
-    font-family: var(--font-head);
-    font-weight: 500;
-    font-size: 19px;
-    margin: 0 0 12px;
-    color: #fff;
-  }
-  .finding-card p {
-    font-size: 14px;
-    color: var(--ice);
-    margin: 0 0 14px;
-  }
-  .finding-card .cite {
-    font-size: 12.5px;
-    color: var(--ice);
-    opacity: 0.8;
-    font-style: italic;
-  }
-
-  /* model select pills */
-  .pill-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
-  .pill {
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 500;
-    padding: 7px 14px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-  }
-  .pill[aria-pressed="true"] {
-    background: var(--navy);
-    border-color: var(--navy);
-    color: #fff;
-  }
-  .pill:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-
-  /* ===== BUDGET SIMULATOR ===== */
-  .sim-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 28px;
-  }
-  .toggle-row {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 26px;
-  }
-  .toggle {
-    display: inline-flex;
-    background: var(--ice-soft);
-    border-radius: 999px;
-    padding: 4px;
-  }
-  .toggle button {
-    border: none;
-    background: transparent;
-    font-family: var(--font-body);
-    font-size: 14px;
-    font-weight: 600;
-    padding: 9px 22px;
-    border-radius: 999px;
-    cursor: pointer;
-    color: var(--text-muted);
-  }
-  .toggle button[aria-pressed="true"] {
-    background: var(--navy);
-    color: #fff;
-  }
-  .toggle button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-  .sim-note { font-size: 13px; color: var(--text-muted); }
-
-  .bar-list { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
-  .bar-row { display: grid; grid-template-columns: 150px 1fr 64px; align-items: center; gap: 12px; }
-  .bar-row .name { font-size: 13.5px; font-weight: 500; }
-  .bar-track { background: var(--ice-soft); border-radius: 6px; height: 26px; overflow: hidden; }
-  .bar-fill {
-    height: 100%;
-    border-radius: 6px;
-    transition: width 0.5s cubic-bezier(.4,0,.2,1);
-  }
-  .bar-row .val { font-size: 13.5px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
-
-  /* ===== CAVEAT BANNER ===== */
-  .caveat {
-    background: var(--ice-soft);
-    border-left: 3px solid var(--amber);
-    border-radius: 6px;
-    padding: 16px 20px;
-    font-size: 13.5px;
-    color: var(--text-muted);
-    margin-top: 22px;
-  }
-  .caveat strong { color: var(--text); }
-
-  /* ===== METHOD STRIP ===== */
-  .method-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-  }
-  .method-item {
-    border-top: 2px solid var(--navy);
-    padding-top: 14px;
-  }
-  .method-item .n {
-    font-family: var(--font-head);
-    font-size: 26px;
-    color: var(--navy);
-  }
-  .method-item .t { font-size: 13px; font-weight: 600; margin: 4px 0 4px; }
-  .method-item .d { font-size: 12.5px; color: var(--text-muted); }
-
-  /* ===== PERSUADABLES QUADRANT ===== */
-  .quad-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-    margin-bottom: 18px;
-  }
-  .quad-cell {
-    text-align: left;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 20px;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-family: var(--font-body);
-    transition: border-color 0.15s ease, background 0.15s ease;
-  }
-  .quad-cell:hover { border-color: var(--teal); }
-  .quad-cell[aria-pressed="true"] { background: var(--ice-soft); border-color: var(--navy); }
-  .quad-cell:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-  .quad-tag {
-    align-self: flex-start;
-    color: #fff;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 999px;
-  }
-  .quad-title { font-size: 15.5px; font-weight: 600; color: var(--text); }
-  .quad-desc { font-size: 13px; color: var(--text-muted); }
-
-  .quad-detail {
-    background: var(--ice-soft);
-    border-radius: 10px;
-    padding: 18px 22px;
-    font-size: 14px;
-    color: var(--text);
-    min-height: 26px;
-  }
-  .quad-detail p { margin: 0; }
-
-  .gap-bar { display: flex; flex-direction: column; gap: 12px; }
-  .gap-row { display: grid; grid-template-columns: 240px 1fr 60px; align-items: center; gap: 12px; }
-  .gap-label { font-size: 13px; color: var(--text-muted); }
-  .gap-track { background: var(--ice-soft); border-radius: 6px; height: 22px; overflow: hidden; }
-  .gap-fill { height: 100%; border-radius: 6px; transition: width 0.7s cubic-bezier(.4,0,.2,1); }
-  .gap-val { font-size: 13.5px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
-
-  footer {
-    padding: 32px 0 48px;
-    font-size: 12.5px;
-    color: var(--text-muted);
-  }
-  footer .refs { margin-top: 8px; }
-  footer .refs div { margin-bottom: 4px; }
-
-  @media (max-width: 860px) {
-    .compare-grid { grid-template-columns: 1fr; }
-    .method-grid { grid-template-columns: repeat(2, 1fr); }
-    .bar-row { grid-template-columns: 100px 1fr 54px; }
-  }
-</style>
-</head>
-<body>
-
-<header class="hero">
-  <div class="wrap">
-    <p class="hero-tag">Uplift Modeling &middot; Causal Machine Learning &middot; Hillstrom Email Marketing Dataset</p>
-    <h1>Does knowing who to target actually change the outcome?</h1>
-    <p class="sub">Four targeting strategies, tested on the same 12,800 held-out customers, evaluated the way this field actually evaluates itself &mdash; with confidence intervals, not just a single winning number.</p>
-    <div class="hero-stats">
-      <div class="hero-stat"><div class="num">64,000</div><div class="lbl">customers, real RCT data</div></div>
-      <div class="hero-stat"><div class="num">4</div><div class="lbl">targeting strategies compared</div></div>
-      <div class="hero-stat"><div class="num">500</div><div class="lbl">bootstrap resamples per model</div></div>
-    </div>
-  </div>
-</header>
-
-<main class="wrap">
-
-  <section id="compare">
-    <h2>Which model actually ranks customers best?</h2>
-    <p class="section-intro">Qini coefficient measures how well a model's ranking captures real incremental visits. Click a model to isolate it &mdash; the shaded band is its 95% confidence interval.</p>
-
-    <div class="compare-grid">
-      <div class="chart-card">
-        <div class="pill-row" id="pillRow"></div>
-        <canvas id="qiniChart" role="img" aria-label="Bar chart of Qini coefficients with confidence intervals for four targeting models"></canvas>
-      </div>
-      <div class="finding-card">
-        <h3>The honest headline</h3>
-        <p>Every model's confidence interval crosses zero and overlaps every other model's. At this sample size, none of the four &mdash; including the naive baseline &mdash; can be shown to beat random targeting with statistical confidence.</p>
-        <p>The Two-Model Approach has the highest point estimate (0.0234), but that alone isn't proof it's the best strategy.</p>
-        <p class="cite">Consistent with Diemert et al. (2018), the paper behind the Criteo uplift benchmark, which found similar statistical indistinguishability at comparable sample sizes.</p>
-      </div>
-    </div>
-  </section>
-
-  <section id="simulator">
-    <h2>Budget simulator</h2>
-    <p class="section-intro">If a business could only email a fraction of its customers, which targeting strategy delivers the most real incremental visits? Toggle the budget to see how the ranking shifts.</p>
-
-    <div class="sim-card">
-      <div class="toggle-row">
-        <div class="toggle" role="group" aria-label="Select budget level">
-          <button id="btn10" aria-pressed="true">10% budget</button>
-          <button id="btn20" aria-pressed="false">20% budget</button>
-        </div>
-        <span class="sim-note" id="simNote">1,280 of 12,800 customers contacted</span>
-      </div>
-
-      <div class="bar-list" id="barList"></div>
-
-      <div class="caveat">
-        <strong>Point estimates, not proof.</strong> These numbers come from a single test set. Per the confidence intervals above, none of these differences are statistically significant at 95% confidence &mdash; read this as what the data suggests, not as settled fact.
-      </div>
-    </div>
-  </section>
-
-  <section id="quadrant">
-    <h2>Who are we actually targeting?</h2>
-    <p class="section-intro">A response model can only tell you who is <em>likely</em> to visit. It can't tell you whether that visit happens <em>because</em> of the email. Every customer actually falls into one of four groups &mdash; only one of them is worth spending budget on.</p>
-
-    <div class="quad-grid">
-      <button class="quad-cell" data-q="sure" aria-pressed="false">
-        <span class="quad-tag" style="background:#A6474C">Sure Things</span>
-        <span class="quad-title">Would visit regardless</span>
-        <span class="quad-desc">The email changes nothing for them &mdash; budget spent here is wasted.</span>
-      </button>
-      <button class="quad-cell" data-q="lost" aria-pressed="false">
-        <span class="quad-tag" style="background:#8A8FAA">Lost Causes</span>
-        <span class="quad-title">Won't visit either way</span>
-        <span class="quad-desc">No intervention moves them. Also wasted budget, for the opposite reason.</span>
-      </button>
-      <button class="quad-cell" data-q="persuadable" aria-pressed="false">
-        <span class="quad-tag" style="background:#1C7293">Persuadables</span>
-        <span class="quad-title">Visit only because of the email</span>
-        <span class="quad-desc">The entire point of targeting. This is the group uplift models try to isolate.</span>
-      </button>
-      <button class="quad-cell" data-q="sleeping" aria-pressed="false">
-        <span class="quad-tag" style="background:#C4900F">Sleeping Dogs</span>
-        <span class="quad-title">Would visit, but the email pushes them away</span>
-        <span class="quad-desc">Rare, but real &mdash; contacting them actively backfires.</span>
-      </button>
-    </div>
-
-    <div class="quad-detail" id="quadDetail">
-      <p>Select a group above to see why a standard response model can't tell it apart from the others.</p>
-    </div>
-
-    <div class="chart-card" style="margin-top:22px;">
-      <h3 style="font-family:var(--font-head);font-weight:500;font-size:17px;margin:0 0 6px;">What we actually measured</h3>
-      <p style="font-size:13.5px;color:var(--text-muted);margin:0 0 16px;max-width:680px;">Our naive baseline model ranks customers by predicted visit probability. Its top decile visited at a real, verified rate of <strong style="color:var(--text)">24.06%</strong>, against <strong style="color:var(--text)">13.71%</strong> for everyone else &mdash; a genuine 10.4-point gap.</p>
-      <div class="gap-bar">
-        <div class="gap-row">
-          <span class="gap-label">Top 10% (highest predicted probability)</span>
-          <div class="gap-track"><div class="gap-fill" style="width:0%; background:#1E2761;" data-target="24.06"></div></div>
-          <span class="gap-val">24.06%</span>
-        </div>
-        <div class="gap-row">
-          <span class="gap-label">Remaining 90% of customers</span>
-          <div class="gap-track"><div class="gap-fill" style="width:0%; background:#8A8FAA;" data-target="13.71"></div></div>
-          <span class="gap-val">13.71%</span>
-        </div>
-      </div>
-      <p style="font-size:12.5px;color:var(--text-muted);margin:16px 0 0;">That gap mixes Sure Things and Persuadables together &mdash; a response model has no way to separate them. That's the exact gap the uplift models on this dashboard are built to close.</p>
-    </div>
-  </section>
-
-  <section id="method">
-    <h2>How this was built</h2>
-    <div class="method-grid">
-      <div class="method-item">
-        <div class="n">01</div>
-        <div class="t">Validate</div>
-        <div class="d">Balance checks confirm treatment/control assignment was genuinely randomized before any modeling began.</div>
-      </div>
-      <div class="method-item">
-        <div class="n">02</div>
-        <div class="t">Baseline</div>
-        <div class="d">A naive LightGBM classifier &mdash; the common, causally-blind approach most targeting still uses today.</div>
-      </div>
-      <div class="method-item">
-        <div class="n">03</div>
-        <div class="t">Uplift models</div>
-        <div class="d">Two-Model, Class Transformation, and a Causal Forest &mdash; three methods of increasing rigor.</div>
-      </div>
-      <div class="method-item">
-        <div class="n">04</div>
-        <div class="t">Evaluate</div>
-        <div class="d">Qini coefficients with bootstrapped confidence intervals &mdash; the field's standard, not accuracy or F1.</div>
-      </div>
-    </div>
-  </section>
-
-</main>
-
-<footer class="wrap">
-  <div>Built on the Hillstrom Email Marketing dataset. Methodology grounded in:</div>
-  <div class="refs">
-    <div>Athey, Tibshirani &amp; Wager (2019). Generalized Random Forests. <em>Annals of Statistics.</em></div>
-    <div>Belbahri et al. (2021). Qini-based Uplift Regression. <em>Annals of Applied Statistics.</em></div>
-    <div>Diemert et al. (2018). A Large Scale Benchmark for Uplift Modeling. <em>AdKDD, KDD 2018.</em></div>
-  </div>
-</footer>
-
-<script>
-  // ===== Real project data =====
-  const qini = [
-    { name: "Two-Model",      short: "2M",  value: 0.0234, lo: -0.0041, hi: 0.0520, color: "#1E2761" },
-    { name: "Class Transform", short: "CT", value: 0.0231, lo: -0.0062, hi: 0.0507, color: "#1C7293" },
-    { name: "Baseline (naive)", short: "BL", value: 0.0129, lo: -0.0134, hi: 0.0420, color: "#A6474C" },
-    { name: "Causal Forest",  short: "CF",  value: 0.0077, lo: -0.0220, hi: 0.0353, color: "#C4900F" },
-  ];
-
-  const business = {
-    10: [
-      { name: "Two-Model", value: 109.9 },
-      { name: "Baseline", value: 105.0 },
-      { name: "Class Transform", value: 91.1 },
-      { name: "Causal Forest", value: 60.2 },
-      { name: "Random", value: 51.5 },
-    ],
-    20: [
-      { name: "Baseline", value: 213.9 },
-      { name: "Two-Model", value: 193.6 },
-      { name: "Class Transform", value: 192.2 },
-      { name: "Causal Forest", value: 136.2 },
-      { name: "Random", value: 117.2 },
-    ]
-  };
-
-  const colorMap = {
-    "Two-Model": "#1E2761",
-    "Baseline": "#A6474C",
-    "Class Transform": "#1C7293",
-    "Causal Forest": "#C4900F",
-    "Random": "#8A8FAA",
-  };
-
-  // ===== Qini chart =====
-  let activeIdx = null;
-  const ctx = document.getElementById('qiniChart').getContext('2d');
-  const errorBarPlugin = {
-    id: 'errorBars',
-    afterDatasetsDraw(chart) {
-      const { ctx, scales: { x, y } } = chart;
-      qini.forEach((m, i) => {
-        if (activeIdx !== null && activeIdx !== i) return;
-        const barX = x.getPixelForValue(i);
-        const yLo = y.getPixelForValue(m.lo);
-        const yHi = y.getPixelForValue(m.hi);
-        ctx.save();
-        ctx.strokeStyle = "#15172B";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(barX, yLo);
-        ctx.lineTo(barX, yHi);
-        ctx.moveTo(barX - 8, yLo);
-        ctx.lineTo(barX + 8, yLo);
-        ctx.moveTo(barX - 8, yHi);
-        ctx.lineTo(barX + 8, yHi);
-        ctx.stroke();
-        ctx.restore();
-      });
+    * {
+      box-sizing: border-box;
     }
-  };
 
-  function buildChart() {
-    const labels = qini.map(m => m.name);
-    const data = qini.map(m => m.value);
-    const colors = qini.map((m, i) => (activeIdx === null || activeIdx === i) ? m.color : "#D8DCEC");
-    return new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          data,
-          backgroundColor: colors,
-          borderRadius: 4,
-          maxBarThickness: 64,
-        }]
-      },
-      options: {
-        responsive: true,
-        animation: { duration: 300 },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (item) => {
-                const m = qini[item.dataIndex];
-                return [`Qini: ${m.value.toFixed(4)}`, `95% CI: [${m.lo.toFixed(4)}, ${m.hi.toFixed(4)}]`];
-              }
-            }
-          }
-        },
-        scales: {
-          y: {
-            min: -0.035,
-            max: 0.06,
-            grid: { color: "#E4E8F5" },
-            ticks: { color: "#565A78", font: { family: 'Inter', size: 11 } },
-            title: { display: true, text: 'Qini coefficient', color: "#565A78", font: { family: 'Inter', size: 12 } }
-          },
-          x: {
-            grid: { display: false },
-            ticks: { color: "#15172B", font: { family: 'Inter', size: 12, weight: '500' } }
-          }
-        }
-      },
-      plugins: [errorBarPlugin]
-    });
-  }
-
-  let chart = buildChart();
-
-  const pillRow = document.getElementById('pillRow');
-  const allPill = document.createElement('button');
-  allPill.className = 'pill';
-  allPill.textContent = 'All models';
-  allPill.setAttribute('aria-pressed', 'true');
-  allPill.addEventListener('click', () => setActive(null));
-  pillRow.appendChild(allPill);
-
-  qini.forEach((m, i) => {
-    const b = document.createElement('button');
-    b.className = 'pill';
-    b.textContent = m.name;
-    b.setAttribute('aria-pressed', 'false');
-    b.addEventListener('click', () => setActive(i));
-    pillRow.appendChild(b);
-  });
-
-  function setActive(i) {
-    activeIdx = i;
-    [...pillRow.children].forEach((el, idx) => {
-      el.setAttribute('aria-pressed', idx === 0 ? (i === null) : (idx - 1 === i));
-    });
-    chart.destroy();
-    chart = buildChart();
-  }
-
-  // ===== Budget simulator =====
-  const barList = document.getElementById('barList');
-  const btn10 = document.getElementById('btn10');
-  const btn20 = document.getElementById('btn20');
-  const simNote = document.getElementById('simNote');
-  const maxVal = 220;
-
-  function renderBars(budget) {
-    barList.innerHTML = '';
-    business[budget].forEach(row => {
-      const rowEl = document.createElement('div');
-      rowEl.className = 'bar-row';
-      const pct = Math.max(4, (row.value / maxVal) * 100);
-      rowEl.innerHTML = `
-        <div class="name">${row.name}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:0%; background:${colorMap[row.name]}"></div></div>
-        <div class="val">${row.value.toFixed(1)}</div>
-      `;
-      barList.appendChild(rowEl);
-      requestAnimationFrame(() => {
-        rowEl.querySelector('.bar-fill').style.width = pct + '%';
-      });
-    });
-    simNote.textContent = budget === 10
-      ? "1,280 of 12,800 customers contacted"
-      : "2,560 of 12,800 customers contacted";
-  }
-
-  btn10.addEventListener('click', () => {
-    btn10.setAttribute('aria-pressed', 'true');
-    btn20.setAttribute('aria-pressed', 'false');
-    renderBars(10);
-  });
-  btn20.addEventListener('click', () => {
-    btn20.setAttribute('aria-pressed', 'true');
-    btn10.setAttribute('aria-pressed', 'false');
-    renderBars(20);
-  });
-
-  renderBars(10);
-
-  // ===== Persuadables quadrant =====
-  const quadInfo = {
-    sure: {
-      title: "Sure Things",
-      body: "A response model scores these customers HIGH because they're likely to visit &mdash; correctly. But it can't tell that they'd visit with or without the email. Targeting them looks like a win in a response model's metrics, but delivers zero real incremental value."
-    },
-    lost: {
-      title: "Lost Causes",
-      body: "Scored LOW by a response model, and correctly so &mdash; they're unlikely to visit. But that low score hides a second, distinct group: people who'd never respond no matter what you do. No model output distinguishes 'not going to happen' from 'happening anyway'."
-    },
-    persuadable: {
-      title: "Persuadables",
-      body: "The group that actually matters, and the hardest to isolate. A response model can score them anywhere &mdash; high, medium, or low &mdash; because what matters isn't their baseline likelihood to visit, it's how much that likelihood changes because of the email. Only an uplift model estimates that directly."
-    },
-    sleeping: {
-      title: "Sleeping Dogs",
-      body: "Rare in this dataset, but real in principle: customers who'd visit on their own, but who disengage if contacted. A response model has no way to flag this risk at all &mdash; it only ever predicts 'will they visit,' never 'will contacting them make things worse.'"
+    html {
+      scroll-behavior: smooth;
     }
-  };
-  const quadCells = document.querySelectorAll('.quad-cell');
-  const quadDetail = document.getElementById('quadDetail');
-  quadCells.forEach(cell => {
-    cell.addEventListener('click', () => {
-      quadCells.forEach(c => c.setAttribute('aria-pressed', 'false'));
-      cell.setAttribute('aria-pressed', 'true');
-      const info = quadInfo[cell.dataset.q];
-      quadDetail.innerHTML = `<p><strong>${info.title}.</strong> ${info.body}</p>`;
-    });
-  });
 
-  // animate gap bars when scrolled into view
-  const gapFills = document.querySelectorAll('.gap-fill');
-  const gapObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.style.width = entry.target.dataset.target + '%';
-        gapObserver.unobserve(entry.target);
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      line-height: 1.55;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    a:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 12px;
+      top: -60px;
+      background: var(--navy);
+      color: white;
+      padding: 10px 14px;
+      border-radius: 8px;
+      z-index: 100;
+    }
+
+    .skip-link:focus {
+      top: 12px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+    }
+
+    .nav-wrap {
+      max-width: 1240px;
+      margin: auto;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .brand {
+      color: var(--navy);
+      text-decoration: none;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+    }
+
+    .nav {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav button {
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .nav button:hover,
+    .nav button[aria-current="page"] {
+      color: var(--navy);
+      background: #edf1fb;
+      border-color: #d9e0f4;
+    }
+
+    .hero {
+      color: white;
+      background:
+        radial-gradient(circle at 85% 20%, rgba(28, 114, 147, 0.45), transparent 32%),
+        linear-gradient(135deg, var(--navy), var(--navy-dark));
+      padding: 70px 24px 58px;
+    }
+
+    .hero-inner,
+    .main {
+      max-width: 1240px;
+      margin: auto;
+    }
+
+    .eyebrow {
+      color: #cdd9fa;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.15;
+    }
+
+    h1,
+    h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+    }
+
+    h1 {
+      max-width: 780px;
+      margin: 16px 0;
+      font-size: clamp(38px, 6vw, 70px);
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      max-width: 700px;
+      color: #dce6fb;
+      font-size: 17px;
+      margin: 0 0 30px;
+    }
+
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+    }
+
+    .stat strong {
+      display: block;
+      font-family: var(--serif);
+      font-size: 34px;
+      font-weight: 500;
+    }
+
+    .stat span {
+      color: #cdd9fa;
+      font-size: 13px;
+    }
+
+    .main {
+      padding: 24px;
+    }
+
+    .view {
+      display: none;
+      padding: 48px 0 20px;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    .view-header {
+      margin-bottom: 26px;
+    }
+
+    .view-header h2 {
+      margin: 0 0 9px;
+      font-size: clamp(30px, 4vw, 46px);
+    }
+
+    .view-header p {
+      max-width: 760px;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .grid {
+      display: grid;
+      gap: 20px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 19px;
+    }
+
+    .card p {
+      color: var(--muted);
+    }
+
+    .notice {
+      border-left: 4px solid var(--amber);
+      background: #fff9e8;
+      color: #5c4a14;
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin: 20px 0;
+    }
+
+    .notice strong {
+      color: #3d310b;
+    }
+
+    .data-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #edf8f1;
+      color: var(--success);
+      border: 1px solid #b9e1c9;
+      border-radius: 999px;
+      padding: 6px 11px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .data-status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+
+    .model-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .model-table th,
+    .model-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 13px 10px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .model-table th {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .model-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .model-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 7px;
+    }
+
+    .metric {
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .ci {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .mini-bar {
+      min-width: 150px;
+      height: 12px;
+      background: #edf0f7;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .mini-bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      min-width: 4px;
+    }
+
+    .segmented {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .segmented button,
+    .profile-button,
+    .quadrant-button {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 9px;
+      padding: 9px 13px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .segmented button[aria-pressed="true"],
+    .profile-button[aria-pressed="true"],
+    .quadrant-button[aria-pressed="true"] {
+      color: white;
+      background: var(--navy);
+      border-color: var(--navy);
+    }
+
+    .bars {
+      display: grid;
+      gap: 16px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 170px 1fr 100px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .bar-label {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .bar-track {
+      height: 25px;
+      overflow: hidden;
+      border-radius: 7px;
+      background: #edf0f7;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      transition: width 0.35s ease;
+    }
+
+    .bar-value {
+      text-align: right;
+      font-size: 13px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .quadrants {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .quadrant-button {
+      text-align: left;
+      min-height: 140px;
+    }
+
+    .quadrant-button strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+
+    .quadrant-button span {
+      color: var(--muted);
+      font-weight: 400;
+      line-height: 1.45;
+    }
+
+    .detail {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 10px;
+      background: #edf1fb;
+      min-height: 80px;
+    }
+
+    .profile-grid {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .profile-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .profile-button {
+      text-align: left;
+    }
+
+    .profile-button small {
+      display: block;
+      color: var(--muted);
+      font-weight: 400;
+      margin-top: 3px;
+    }
+
+    .profile-button[aria-pressed="true"] small {
+      color: #dce6fb;
+    }
+
+    .profile-result {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      background: #fbfcff;
+    }
+
+    .profile-score {
+      font-family: var(--serif);
+      color: var(--navy);
+      font-size: 42px;
+      font-weight: 500;
+    }
+
+    .decision {
+      display: inline-block;
+      padding: 6px 10px;
+      color: white;
+      background: var(--teal);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .roi-controls {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input,
+    select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: white;
+      padding: 10px 11px;
+      color: var(--text);
+    }
+
+    .roi-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin: 20px 0;
+    }
+
+    .roi-number {
+      background: #f0f7fa;
+      border: 1px solid #cce1e9;
+      border-radius: 10px;
+      padding: 17px;
+    }
+
+    .roi-number span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .roi-number strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--navy);
+      font-family: var(--serif);
+      font-size: 30px;
+      font-weight: 500;
+    }
+
+    .method-list {
+      display: grid;
+      gap: 16px;
+    }
+
+    .method-item {
+      border-top: 3px solid var(--navy);
+      padding-top: 12px;
+    }
+
+    .method-item strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .method-item span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    footer {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 38px 24px 60px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 850px) {
+      .grid.two,
+      .grid.three,
+      .profile-grid,
+      .roi-controls,
+      .roi-summary {
+        grid-template-columns: 1fr;
       }
+
+      .bar-row {
+        grid-template-columns: 125px 1fr 80px;
+      }
+
+      .nav-wrap {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .nav {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .main,
+      .hero,
+      footer {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .quadrants {
+        grid-template-columns: 1fr;
+      }
+
+      .bar-row {
+        grid-template-columns: 1fr;
+        gap: 5px;
+      }
+
+      .bar-value {
+        text-align: left;
+      }
+
+      .mini-bar {
+        min-width: 100px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <header class="topbar">
+    <div class="nav-wrap">
+      <a class="brand" href="#overview">Uplift ML Dashboard</a>
+
+      <nav class="nav" aria-label="Dashboard sections">
+        <button data-view="overview" aria-current="page">Overview</button>
+        <button data-view="simulator">Budget simulator</button>
+        <button data-view="persuadables">Persuadables</button>
+        <button data-view="customer">Customer explainer</button>
+        <button data-view="roi">ROI view</button>
+      </nav>
+    </div>
+  </header>
+
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="eyebrow">Causal machine learning · Hillstrom email experiment</div>
+      <h1>Who should we actually target?</h1>
+      <p>
+        This dashboard compares response and uplift models using held-out randomized
+        experiment data. The goal is not simply to predict who will visit, but to estimate
+        who may visit because of an intervention.
+      </p>
+
+      <div class="stats" aria-label="Project summary">
+        <div class="stat">
+          <strong>64,000</strong>
+          <span>customers in the experiment</span>
+        </div>
+        <div class="stat">
+          <strong>12,800</strong>
+          <span>customers in the held-out test set</span>
+        </div>
+        <div class="stat">
+          <strong>4</strong>
+          <span>targeting strategies compared</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content" class="main">
+    <!-- OVERVIEW -->
+    <section id="overview" class="view active" aria-labelledby="overview-title">
+      <div class="view-header">
+        <span class="data-status">Results loaded from project artifacts</span>
+        <h2 id="overview-title">Model comparison</h2>
+        <p>
+          Qini coefficient measures how well a model ranks customers by estimated incremental
+          response. The confidence interval shows uncertainty around the point estimate.
+        </p>
+      </div>
+
+      <div class="notice">
+        <strong>Interpretation:</strong>
+        The Two-Model Approach has the highest point estimate, but every model's 95% confidence
+        interval includes zero. This dataset does not provide strong statistical evidence that
+        one strategy is better than the others.
+      </div>
+
+      <div class="card">
+        <h3>Qini results</h3>
+        <p>
+          Higher bars are better point estimates. A confidence interval crossing zero means
+          positive incremental impact is not statistically conclusive at the 95% level.
+        </p>
+
+        <div style="overflow-x:auto;">
+          <table class="model-table">
+            <caption class="sr-only">Qini results and confidence intervals by model</caption>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Qini coefficient</th>
+                <th>95% confidence interval</th>
+                <th>Relative point estimate</th>
+              </tr>
+            </thead>
+            <tbody id="modelTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid two" style="margin-top:20px;">
+        <article class="card">
+          <h3>What the result means</h3>
+          <p>
+            The ranking is useful for experimentation and business planning, but it should not
+            be treated as proof that the top model will always win in a future campaign.
+          </p>
+          <p>
+            A future decision should ideally include a new randomized holdout group and measure
+            incremental outcomes again.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>What was measured</h3>
+          <div class="method-list">
+            <div class="method-item">
+              <strong>Randomization check</strong>
+              <span>Verified that treatment and control groups were comparable before modeling.</span>
+            </div>
+            <div class="method-item">
+              <strong>Baseline</strong>
+              <span>Predicted visit probability without explicitly modeling treatment effect.</span>
+            </div>
+            <div class="method-item">
+              <strong>Uplift models</strong>
+              <span>Estimated differences between treated and untreated outcomes.</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- BUDGET SIMULATOR -->
+    <section id="simulator" class="view" aria-labelledby="simulator-title">
+      <div class="view-header">
+        <h2 id="simulator-title">Budget simulator</h2>
+        <p>
+          Choose how many customers can be contacted. The dashboard compares estimated
+          incremental visits for each strategy.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="segmented" role="group" aria-label="Budget level">
+          <button data-budget="10" aria-pressed="true">10% budget</button>
+          <button data-budget="20" aria-pressed="false">20% budget</button>
+        </div>
+
+        <p id="budgetNote" class="card p"></p>
+        <div id="budgetBars" class="bars" aria-live="polite"></div>
+
+        <div class="notice">
+          <strong>Important:</strong>
+          These are point estimates from one held-out test set. They are not guaranteed future
+          revenue or statistically confirmed differences.
+        </div>
+      </div>
+    </section>
+
+    <!-- PERSUADABLES -->
+    <section id="persuadables" class="view" aria-labelledby="persuadables-title">
+      <div class="view-header">
+        <h2 id="persuadables-title">The persuadables problem</h2>
+        <p>
+          A standard response model predicts who is likely to respond. Uplift modeling asks a
+          different question: who responds because they received the intervention?
+        </p>
+      </div>
+
+      <div class="quadrants" role="group" aria-label="Customer response groups">
+        <button class="quadrant-button" data-quadrant="sure" aria-pressed="true">
+          <strong style="color:var(--red);">Sure things</strong>
+          <span>Would respond with or without the email. Targeting them may waste budget.</span>
+        </button>
+
+        <button class="quadrant-button" data-quadrant="lost" aria-pressed="false">
+          <strong style="color:var(--gray);">Lost causes</strong>
+          <span>Would not respond with or without the email.</span>
+        </button>
+
+        <button class="quadrant-button" data-quadrant="persuadable" aria-pressed="false">
+          <strong style="color:var(--teal);">Persuadables</strong>
+          <span>Respond because of the intervention. This is the main targeting opportunity.</span>
+        </button>
+
+        <button class="quadrant-button" data-quadrant="sleeping" aria-pressed="false">
+          <strong style="color:var(--amber);">Sleeping dogs</strong>
+          <span>May respond without contact but react negatively to the intervention.</span>
+        </button>
+      </div>
+
+      <div id="quadrantDetail" class="detail" aria-live="polite"></div>
+
+      <div class="card" style="margin-top:20px;">
+        <h3>Why the naive model is not enough</h3>
+        <p>
+          A response model can rank customers by their overall probability of visiting, but it
+          cannot directly observe both outcomes for the same person: what happened with the
+          email and what would have happened without it.
+        </p>
+
+        <div class="grid two">
+          <div>
+            <strong>Top baseline decile</strong>
+            <p class="metric">24.06% observed visit rate</p>
+          </div>
+          <div>
+            <strong>Remaining customers</strong>
+            <p class="metric">13.71% observed visit rate</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CUSTOMER EXPLAINER -->
+    <section id="customer" class="view" aria-labelledby="customer-title">
+      <div class="view-header">
+        <h2 id="customer-title">Customer-level explainer</h2>
+        <p>
+          These are illustrative customer profiles, not real customer records. They explain how
+          different targeting scores can lead to different decisions without exposing individual
+          data.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="profile-grid">
+          <div class="profile-list" role="group" aria-label="Illustrative customer profiles">
+            <button class="profile-button" data-profile="persuadable" aria-pressed="true">
+              Profile A
+              <small>High estimated uplift</small>
+            </button>
+            <button class="profile-button" data-profile="sure" aria-pressed="false">
+              Profile B
+              <small>High response, low uplift</small>
+            </button>
+            <button class="profile-button" data-profile="lost" aria-pressed="false">
+              Profile C
+              <small>Low response, low uplift</small>
+            </button>
+          </div>
+
+          <article id="profileResult" class="profile-result" aria-live="polite"></article>
+        </div>
+      </div>
+
+      <div class="notice">
+        <strong>Privacy note:</strong>
+        The profiles above are educational examples generated for the dashboard. They are not
+        customer-level predictions from the raw Hillstrom file.
+      </div>
+    </section>
+
+    <!-- ROI -->
+    <section id="roi" class="view" aria-labelledby="roi-title">
+      <div class="view-header">
+        <h2 id="roi-title">ROI view</h2>
+        <p>
+          Convert the estimated incremental visits into a simple scenario estimate. Because the
+          original project reports visits rather than revenue, revenue and contact cost are
+          configurable assumptions.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="roi-controls">
+          <label>
+            Budget level
+            <select id="roiBudget">
+              <option value="10">10%</option>
+              <option value="20%">20%</option>
+            </select>
+          </label>
+
+          <label>
+            Value per incremental visit
+            <input id="visitValue" type="number" min="0" step="0.01" value="5">
+          </label>
+
+          <label>
+            Cost per contacted customer
+            <input id="contactCost" type="number" min="0" step="0.01" value="0.25">
+          </label>
+        </div>
+
+        <div class="notice">
+          <strong>Scenario assumption:</strong>
+          ROI is illustrative. Change the value and cost inputs to explore scenarios. It is not
+          a causal revenue estimate because the source experiment reports visits, not purchases
+          or profit.
+        </div>
+
+        <div class="roi-summary">
+          <div class="roi-number">
+            <span>Selected strategy</span>
+            <strong id="roiStrategy">Two-Model</strong>
+          </div>
+          <div class="roi-number">
+            <span>Estimated incremental value</span>
+            <strong id="roiValue">$0.00</strong>
+          </div>
+          <div class="roi-number">
+            <span>Estimated net impact</span>
+            <strong id="roiNet">$0.00</strong>
+          </div>
+        </div>
+
+        <div class="segmented" id="roiStrategies" role="group" aria-label="ROI strategy">
+          <button data-strategy="Two-Model" aria-pressed="true">Two-Model</button>
+          <button data-strategy="Baseline (naive)" aria-pressed="false">Baseline</button>
+          <button data-strategy="Class Transformation" aria-pressed="false">Class Transformation</button>
+          <button data-strategy="Causal Forest" aria-pressed="false">Causal Forest</button>
+          <button data-strategy="Random Selection" aria-pressed="false">Random</button>
+        </div>
+
+        <p id="roiExplanation" class="card p"></p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <strong>Data source:</strong> Hillstrom Email Marketing dataset.
+    Phase 5 values come from <code>data/processed/phase5_results.csv</code>.
+    Phase 6 values come from <code>data/processed/phase6_business_impact.csv</code>.
+    This dashboard embeds those committed results so it can run directly from a clean clone.
+  </footer>
+
+  <script>
+    /*
+      Dashboard data source:
+      - Phase 5: data/processed/phase5_results.csv
+      - Phase 6: data/processed/phase6_business_impact.csv
+
+      The values are embedded intentionally because browsers often block local
+      file:// fetch requests. Re-run the project pipeline before updating them.
+    */
+
+    const modelResults = [
+      {
+        name: "Two-Model Approach",
+        short: "Two-Model",
+        qini: 0.0234,
+        lo: -0.0041,
+        hi: 0.0520,
+        color: "#1e2761"
+      },
+      {
+        name: "Class Transformation",
+        short: "Class Transformation",
+        qini: 0.0231,
+        lo: -0.0062,
+        hi: 0.0507,
+        color: "#1c7293"
+      },
+      {
+        name: "Baseline (naive, non-causal)",
+        short: "Baseline (naive)",
+        qini: 0.0129,
+        lo: -0.0134,
+        hi: 0.0420,
+        color: "#a6474c"
+      },
+      {
+        name: "Causal Forest",
+        short: "Causal Forest",
+        qini: 0.0077,
+        lo: -0.0220,
+        hi: 0.0353,
+        color: "#c4900f"
+      }
+    ];
+
+    const budgetResults = {
+      10: [
+        { strategy: "Two-Model", customers: 1280, visits: 109.8832, rate: 0.085846, color: "#1e2761" },
+        { strategy: "Baseline (naive)", customers: 1280, visits: 105.0351, rate: 0.082059, color: "#a6474c" },
+        { strategy: "Class Transformation", customers: 1280, visits: 91.1243, rate: 0.071191, color: "#1c7293" },
+        { strategy: "Causal Forest", customers: 1280, visits: 60.1575, rate: 0.046998, color: "#c4900f" },
+        { strategy: "Random Selection", customers: 1280, visits: 51.5359, rate: 0.040262, color: "#8a8faa" }
+      ],
+      20: [
+        { strategy: "Baseline (naive)", customers: 2560, visits: 213.9479, rate: 0.083573, color: "#a6474c" },
+        { strategy: "Two-Model", customers: 2560, visits: 193.5810, rate: 0.075618, color: "#1e2761" },
+        { strategy: "Class Transformation", customers: 2560, visits: 192.2029, rate: 0.075079, color: "#1c7293" },
+        { strategy: "Causal Forest", customers: 2560, visits: 136.1593, rate: 0.053187, color: "#c4900f" },
+        { strategy: "Random Selection", customers: 2560, visits: 117.1795, rate: 0.045774, color: "#8a8faa" }
+      ]
+    };
+
+    const quadrantText = {
+      sure: {
+        title: "Sure things",
+        text: "These customers are likely to visit regardless of treatment. A high response score can rank them near the top even when the incremental effect of contacting them is close to zero."
+      },
+      lost: {
+        title: "Lost causes",
+        text: "These customers are unlikely to visit under either condition. Sending an email may consume budget without producing an incremental visit."
+      },
+      persuadable: {
+        title: "Persuadables",
+        text: "These customers are the main uplift opportunity: their outcome improves because they receive the intervention. Uplift models try to rank this hidden group using aggregate experiment data."
+      },
+      sleeping: {
+        title: "Sleeping dogs",
+        text: "These customers may respond negatively to the intervention. They are difficult to identify perfectly, which is why validation and randomized holdouts remain important."
+      }
+    };
+
+    const profileData = {
+      persuadable: {
+        title: "Profile A: estimated persuadable",
+        score: "+0.18 estimated uplift",
+        decision: "Prioritize for testing",
+        body: "This illustrative profile has a moderate baseline response probability but a comparatively high estimated treatment effect. A response model might overlook it, while an uplift model would prioritize it.",
+        caveat: "Illustrative profile only; not an individual-level prediction."
+      },
+      sure: {
+        title: "Profile B: likely sure thing",
+        score: "+0.01 estimated uplift",
+        decision: "Consider excluding",
+        body: "This profile has a high predicted response probability, but most of that response is expected to happen without the email. A naive model may rank it highly, while uplift targeting may assign lower priority.",
+        caveat: "High response probability does not equal high incremental impact."
+      },
+      lost: {
+        title: "Profile C: likely lost cause",
+        score: "-0.01 estimated uplift",
+        decision: "Do not prioritize",
+        body: "This profile has low expected response under both conditions. It is unlikely to be a good use of a limited contact budget.",
+        caveat: "Negative or near-zero uplift estimates should be validated in a future experiment."
+      }
+    };
+
+    const roiState = {
+      budget: "10",
+      strategy: "Two-Model"
+    };
+
+    const navButtons = document.querySelectorAll(".nav button");
+    const views = document.querySelectorAll(".view");
+
+    function showView(viewId) {
+      views.forEach((view) => {
+        view.classList.toggle("active", view.id === viewId);
+      });
+
+      navButtons.forEach((button) => {
+        const active = button.dataset.view === viewId;
+        button.setAttribute("aria-current", active ? "page" : "false");
+      });
+
+      document.getElementById(viewId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    navButtons.forEach((button) => {
+      button.addEventListener("click", () => showView(button.dataset.view));
     });
-  }, { threshold: 0.4 });
-  gapFills.forEach(el => gapObserver.observe(el));
-</script>
+
+    function renderModelTable() {
+      const table = document.getElementById("modelTable");
+      const maxQini = Math.max(...modelResults.map((model) => model.qini));
+
+      table.innerHTML = modelResults.map((model) => {
+        const width = Math.max(5, (model.qini / maxQini) * 100);
+
+        return `
+          <tr>
+            <td>
+              <span class="model-dot" style="background:${model.color}"></span>
+              ${model.name}
+            </td>
+            <td class="metric">${model.qini.toFixed(4)}</td>
+            <td class="ci">[${model.lo.toFixed(4)}, ${model.hi.toFixed(4)}]</td>
+            <td>
+              <div class="mini-bar" aria-label="${model.name} relative Qini estimate">
+                <span style="width:${width}%;background:${model.color}"></span>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function renderBudget(budget) {
+      const rows = budgetResults[budget];
+      const maxVisits = Math.max(...rows.map((row) => row.visits));
+      const contacted = rows[0].customers;
+
+      document.querySelectorAll("[data-budget]").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.budget === budget);
+      });
+
+      document.getElementById("budgetNote").textContent =
+        `${contacted.toLocaleString()} of 12,800 test customers contacted. Values show estimated incremental visits.`;
+
+      document.getElementById("budgetBars").innerHTML = rows.map((row) => {
+        const width = Math.max(4, (row.visits / maxVisits) * 100);
+
+        return `
+          <div class="bar-row">
+            <div class="bar-label">${row.strategy}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${width}%;background:${row.color}"></div>
+            </div>
+            <div class="bar-value">${row.visits.toFixed(1)}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    document.querySelectorAll("[data-budget]").forEach((button) => {
+      button.addEventListener("click", () => renderBudget(button.dataset.budget));
+    });
+
+    function renderQuadrant(key) {
+      const info = quadrantText[key];
+
+      document.querySelectorAll("[data-quadrant]").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.quadrant === key);
+      });
+
+      document.getElementById("quadrantDetail").innerHTML = `
+        <strong>${info.title}</strong>
+        <p>${info.text}</p>
+      `;
+    }
+
+    document.querySelectorAll("[data-quadrant]").forEach((button) => {
+      button.addEventListener("click", () => renderQuadrant(button.dataset.quadrant));
+    });
+
+    function renderProfile(key) {
+      const profile = profileData[key];
+
+      document.querySelectorAll("[data-profile]").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.profile === key);
+      });
+
+      document.getElementById("profileResult").innerHTML = `
+        <h3>${profile.title}</h3>
+        <div class="profile-score">${profile.score}</div>
+        <p><span class="decision">${profile.decision}</span></p>
+        <p>${profile.body}</p>
+        <small>${profile.caveat}</small>
+      `;
+    }
+
+    document.querySelectorAll("[data-profile]").forEach((button) => {
+      button.addEventListener("click", () => renderProfile(button.dataset.profile));
+    });
+
+    function getRoiRow() {
+      return budgetResults[roiState.budget]
+        .find((row) => row.strategy === roiState.strategy);
+    }
+
+    function updateRoi() {
+      const row = getRoiRow();
+      const valuePerVisit = Number(document.getElementById("visitValue").value) || 0;
+      const contactCost = Number(document.getElementById("contactCost").value) || 0;
+
+      const estimatedValue = row.visits * valuePerVisit;
+      const totalCost = row.customers * contactCost;
+      const netImpact = estimatedValue - totalCost;
+      const roiPercent = totalCost > 0 ? (netImpact / totalCost) * 100 : 0;
+
+      document.getElementById("roiStrategy").textContent = row.strategy;
+      document.getElementById("roiValue").textContent =
+        `$${estimatedValue.toFixed(2)}`;
+      document.getElementById("roiNet").textContent =
+        `$${netImpact.toFixed(2)}`;
+
+      document.getElementById("roiExplanation").textContent =
+        `${row.strategy} at the ${roiState.budget}% budget contacts ` +
+        `${row.customers.toLocaleString()} customers and estimates ` +
+        `${row.visits.toFixed(1)} incremental visits. Under the current assumptions, ` +
+        `the estimated net impact is $${netImpact.toFixed(2)} and the scenario ROI is ` +
+        `${roiPercent.toFixed(1)}%.`;
+    }
+
+    document.getElementById("roiBudget").addEventListener("change", (event) => {
+      roiState.budget = event.target.value;
+      updateRoi();
+    });
+
+    document.getElementById("visitValue").addEventListener("input", updateRoi);
+    document.getElementById("contactCost").addEventListener("input", updateRoi);
+
+    document.querySelectorAll("[data-strategy]").forEach((button) => {
+      button.addEventListener("click", () => {
+        roiState.strategy = button.dataset.strategy;
+
+        document.querySelectorAll("[data-strategy]").forEach((item) => {
+          item.setAttribute("aria-pressed", item.dataset.strategy === roiState.strategy);
+        });
+
+        updateRoi();
+      });
+    });
+
+    renderModelTable();
+    renderBudget("10");
+    renderQuadrant("sure");
+    renderProfile("persuadable");
+    updateRoi();
+
+    // Support direct links such as dashboard/index.html#roi.
+    const initialView = window.location.hash.replace("#", "");
+    if (["overview", "simulator", "persuadables", "customer", "roi"].includes(initialView)) {
+      showView(initialView);
+    }
+  </script>
 </body>
 </html>

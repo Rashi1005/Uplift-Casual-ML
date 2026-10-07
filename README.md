@@ -236,14 +236,69 @@ traceable even after re-running the pipeline.
 
 ## Interactive dashboard
 
-`dashboard/index.html` — a working, self-contained prototype (open directly in any browser, no build step):
+The dashboard is a self-contained static HTML application located at:
 
-- **Model comparison** — click any model to isolate it and see its confidence interval
-- **Budget simulator** — toggle between 10%/20% budget and watch the ranking shift
-- **Persuadables quadrant** — an interactive explainer for why standard predictive models can't separate customers who respond *because of* an intervention from those who'd respond anyway
+```text
+dashboard/index.html
+```
 
-This covers 3 of 5 originally scoped dashboard screens (model comparison, budget simulator, persuadables quadrant); a customer-level explainer view and an ROI view are not yet built.
+It includes five views:
 
+1. **Overview** — Qini coefficients and 95% confidence intervals.
+2. **Budget simulator** — estimated incremental visits at 10% and 20% contact budgets.
+3. **Persuadables** — explanation of sure things, lost causes, persuadables, and sleeping dogs.
+4. **Customer-level explainer** — illustrative, non-identifying profiles showing how response and uplift scores can lead to different decisions.
+5. **ROI view** — scenario-based value and cost estimates using configurable assumptions.
+
+The dashboard uses the committed results from:
+
+```text
+data/processed/phase5_results.csv
+data/processed/phase6_business_impact.csv
+```
+
+The values are embedded in `dashboard/index.html` intentionally. This allows the dashboard to work when opened directly with a browser, because browsers commonly block local `file://` requests for CSV files.
+
+### Open the dashboard
+
+From the repository root:
+
+```bash
+# Windows PowerShell
+Start-Process dashboard/index.html
+```
+
+Or open this file manually in a browser:
+
+```text
+dashboard/index.html
+```
+
+A local static server can also be used:
+
+```bash
+python -m http.server 8000
+```
+
+Then open:
+
+```text
+http://localhost:8000/dashboard/index.html
+```
+
+### Updating dashboard results
+
+If the model pipeline is rerun and the generated results change:
+
+1. Run the evaluation and business simulation steps.
+2. Read the updated values from:
+   - `data/processed/phase5_results.csv`
+   - `data/processed/phase6_business_impact.csv`
+3. Update the embedded `modelResults` and `budgetResults` objects in:
+   - `dashboard/index.html`
+4. Verify the dashboard manually in a browser.
+
+The customer-level profiles in the dashboard are illustrative examples. They are not predictions for individual customers and do not expose raw customer-level data.
 ---
 
 ## Repository structure
